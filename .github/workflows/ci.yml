@@ -104,8 +104,6 @@ jobs:
       # el parseo del YAML, rompe la ejecucion, y solo se descubre tras empujar.
       - name: Las referencias a actions existen de verdad
         run: ./scripts/check-action-refs.sh
-        env:
-          GH_TOKEN: ${{ github.token }}
 
   sast:
     name: SAST (Semgrep)
