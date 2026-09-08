@@ -8,5 +8,5 @@ pnpm-lock.yaml
 # Documentos de spec preexistentes: se reubican (T01), no se reformatean.
 # CLAUDE.md es la constitucion del proyecto y no se toca (instruccion explicita de T01).
 CLAUDE.md
-.claude/prds/plataforma-coordinacion.md
-.claude/epics/epic-01-cimientos.md
+.claude/epics/*.md
+.claude/prds/*.md
