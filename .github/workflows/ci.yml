@@ -100,6 +100,12 @@ jobs:
       # aristas entre paquetes en vez de resolverlas a dist/ (ver la cabecera de
       # .dependency-cruiser.cjs). Comprobado en un arbol sin dist: arch exit=0.
       - run: pnpm arch
+      # CLAUDE.md 2.5 extendido a las actions: una referencia inventada no rompe
+      # el parseo del YAML, rompe la ejecucion, y solo se descubre tras empujar.
+      - name: Las referencias a actions existen de verdad
+        run: ./scripts/check-action-refs.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   sast:
     name: SAST (Semgrep)
