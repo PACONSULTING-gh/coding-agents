@@ -1,0 +1,88 @@
+{
+  "graph": {
+    "nodes": {
+      "app1": {
+        "name": "app1",
+        "type": "lib",
+        "data": {
+          "root": "packages/app1",
+          "name": "app1",
+          "tags": ["npm:public"],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "app1",
+              "packageVersion": "1.0.0",
+              "packageMain": "index.js",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "targets": {},
+          "implicitDependencies": []
+        }
+      },
+      "lib1": {
+        "name": "lib1",
+        "type": "lib",
+        "data": {
+          "root": "packages/lib1",
+          "name": "lib1",
+          "tags": ["npm:public"],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "lib1",
+              "packageVersion": "1.0.0",
+              "packageMain": "index.js",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "targets": {},
+          "implicitDependencies": []
+        }
+      },
+      "lib2": {
+        "name": "lib2",
+        "type": "lib",
+        "data": {
+          "root": "packages/lib2",
+          "name": "lib2",
+          "tags": ["npm:public"],
+          "metadata": {
+            "targetGroups": {},
+            "js": {
+              "packageName": "lib2",
+              "packageVersion": "1.0.0",
+              "packageMain": "index.js",
+              "isInPackageManagerWorkspaces": true
+            }
+          },
+          "targets": {},
+          "implicitDependencies": []
+        }
+      }
+    },
+    "dependencies": {
+      "app1": [
+        {
+          "source": "app1",
+          "target": "lib1",
+          "type": "static"
+        },
+        {
+          "source": "app1",
+          "target": "lib2",
+          "type": "static"
+        }
+      ],
+      "lib1": [
+        {
+          "source": "lib1",
+          "target": "lib2",
+          "type": "static"
+        }
+      ],
+      "lib2": []
+    }
+  }
+}

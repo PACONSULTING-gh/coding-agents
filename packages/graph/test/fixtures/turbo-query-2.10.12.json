@@ -1,0 +1,41 @@
+{
+  "data": {
+    "packages": {
+      "items": [
+        {
+          "name": "//",
+          "path": "",
+          "directDependencies": {
+            "items": [
+              {
+                "name": "//"
+              }
+            ]
+          }
+        },
+        {
+          "name": "@repo/ui",
+          "path": "packages/ui",
+          "directDependencies": {
+            "items": [
+              {
+                "name": "//"
+              }
+            ]
+          }
+        },
+        {
+          "name": "@repo/web",
+          "path": "packages/web",
+          "directDependencies": {
+            "items": [
+              {
+                "name": "@repo/ui"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
