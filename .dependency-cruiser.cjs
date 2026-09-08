@@ -58,7 +58,7 @@ module.exports = {
       comment:
         'packages/core es el dominio: no puede depender de infraestructura ni de apps (CLAUDE.md 3, dependencias apuntan hacia dentro).',
       from: { path: '^packages/core' },
-      to: { path: '^(apps|packages/(db|queue|github))' },
+      to: { path: '^(apps|packages/(db|queue|github|graph))' },
     },
     {
       name: 'pg-boss-solo-en-queue',
@@ -73,6 +73,35 @@ module.exports = {
       comment: 'El acceso directo a Postgres vive solo en packages/db.',
       from: { pathNot: '^packages/db' },
       to: { path: `${NODE_MODULES}pg(/|$)` },
+    },
+    {
+      name: 'tree-sitter-solo-en-graph',
+      severity: 'error',
+      comment:
+        'tree-sitter y sus gramaticas son modulos NATIVOS y son el detalle de implementacion ' +
+        'de la ingesta del grafo (epic 02, T02). Fuera de packages/graph nadie parsea codigo: ' +
+        'quien necesite estructura del codigo pregunta al grafo, no vuelve a parsear el repo.',
+      from: { pathNot: '^packages/graph' },
+      // `tree-sitter[^/]*` casa con la runtime y con todas las gramaticas
+      // (`tree-sitter-typescript`, `-python`, ...). No se escribe
+      // `tree-sitter(-[^/]+)?` porque dependency-cruiser rechaza ese patron por
+      // ReDoS (cuantificador anidado) y se niega a correr: la regla no quedaria
+      // laxa, quedaria INEXISTENTE.
+      to: { path: `${NODE_MODULES}tree-sitter[^/]*(/|$)` },
+    },
+    {
+      name: 'mcp-sdk-solo-en-graph-mcp',
+      severity: 'error',
+      comment:
+        'El SDK de MCP es el transporte de las herramientas del grafo (epic 02, T05) y vive ' +
+        'solo en packages/graph/{src,test}/mcp/. La logica de consulta (queries.ts, claims.ts) ' +
+        'no puede depender de como se expone: si se acopla, exponerla por otra via obliga a ' +
+        'reescribirla. test/mcp/ tiene el mismo permiso que src/mcp/ (y solo ese subdirectorio, ' +
+        'no el resto de test/) porque el criterio de aceptacion de T05 exige arrancar el servidor ' +
+        'de verdad y hablarle por stdio con el CLIENTE del SDK, no solo probar las funciones ' +
+        'internas.',
+      from: { pathNot: '^packages/graph/(src|test)/mcp/' },
+      to: { path: `${NODE_MODULES}@modelcontextprotocol/sdk(/|$)` },
     },
     {
       name: 'octokit-solo-en-github',

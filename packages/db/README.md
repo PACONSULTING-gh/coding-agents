@@ -61,13 +61,17 @@ La tabla de control (`pgmigrations`) vive en el schema `migrations`, no en
 exigir sin excepciones que todas tengan RLS forzada — lo comprueba un test que
 recorre el catálogo.
 
-| Migración | Qué hace                                                           |
-| --------- | ------------------------------------------------------------------ |
-| `0001`    | Extensión `pgcrypto`, roles `app_migrator` / `app_runtime`, grants |
-| `0002`    | Las 11 tablas del núcleo, índices y claves ajenas compuestas       |
-| `0003`    | `ENABLE` + `FORCE ROW LEVEL SECURITY` y una política por tabla     |
-| `0004`    | `audit_log` append-only (grants + trigger)                         |
-| `0005`    | Semilla del RBAC base, por tenant, vía trigger sobre `tenants`     |
+| Migración | Qué hace                                                                |
+| --------- | ----------------------------------------------------------------------- |
+| `0001`    | Extensión `pgcrypto`, roles `app_migrator` / `app_runtime`, grants      |
+| `0002`    | Las 11 tablas del núcleo, índices y claves ajenas compuestas            |
+| `0003`    | `ENABLE` + `FORCE ROW LEVEL SECURITY` y una política por tabla          |
+| `0004`    | `audit_log` append-only (grants + trigger)                              |
+| `0005`    | Semilla del RBAC base, por tenant, vía trigger sobre `tenants`          |
+| `0006`    | `github_installations`, `webhook_deliveries` y su carve-out de enrutado |
+| `0007`    | Grafo: `graph_nodes`, `graph_edges`, `graph_files`, `graph_ingestions`  |
+| `0008`    | `claims`: reservas con arriendo sobre issues y ficheros (ver ADR 0004)  |
+| `0009`    | `graph_files.import_specifiers` y el `COMMENT` de `graph_edges.weight`  |
 
 ---
 

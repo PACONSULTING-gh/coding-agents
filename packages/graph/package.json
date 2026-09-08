@@ -1,0 +1,29 @@
+{
+  "name": "@coord/graph",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p test/tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@coord/core": "workspace:*",
+    "@coord/db": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "p-limit": "^7.3.2",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-javascript": "^0.23.1",
+    "tree-sitter-python": "^0.23.4",
+    "tree-sitter-typescript": "^0.23.2",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@testcontainers/postgresql": "^12.1.0",
+    "testcontainers": "^12.1.0"
+  }
+}

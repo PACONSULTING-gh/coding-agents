@@ -102,6 +102,7 @@ async function seedTenant(client: Client, slug: string): Promise<TenantFixture> 
   // se reparte uno por fixture, no aleatorio, para que el test sea reproducible.
   nextInstallationId += 1
   const installationId = nextInstallationId
+  const repoId = randomUUID()
 
   await withTenantSession(client, id, async () => {
     await client.query('INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)', [
@@ -166,6 +167,50 @@ async function seedTenant(client: Client, slug: string): Promise<TenantFixture> 
     await client.query(
       'INSERT INTO webhook_deliveries (tenant_id, delivery_id, event) VALUES ($1, $2, $3)',
       [id, randomUUID(), 'issues'],
+    )
+
+    // Grafo de dependencias (migracion 0007). Los dos fixtures usan A PROPOSITO
+    // las MISMAS rutas: si el aislamiento del grafo dependiera de que las claves
+    // naturales no chocan, el test pasaria por casualidad. Lo que tiene que
+    // aislar es la RLS.
+    const [fromNodeId, toNodeId] = [randomUUID(), randomUUID()]
+    for (const [nodeId, path] of [
+      [fromNodeId, 'src/app.ts'],
+      [toNodeId, 'src/lib.ts'],
+    ] as const) {
+      await client.query(
+        `INSERT INTO graph_nodes (id, tenant_id, repo_id, kind, path, language)
+         VALUES ($1, $2, $3, 'file', $4, 'typescript')`,
+        [nodeId, id, repoId, path],
+      )
+    }
+    await client.query(
+      `INSERT INTO graph_edges (tenant_id, repo_id, from_node_id, to_node_id, kind, source)
+       VALUES ($1, $2, $3, $4, 'imports', 'static')`,
+      [id, repoId, fromNodeId, toNodeId],
+    )
+    await client.query(
+      `INSERT INTO graph_files (tenant_id, repo_id, path, content_hash, language)
+       VALUES ($1, $2, 'src/app.ts', repeat('a', 40), 'typescript')`,
+      [id, repoId],
+    )
+    await client.query(
+      `INSERT INTO graph_ingestions (tenant_id, repo_id, commit_sha, status)
+       VALUES ($1, $2, repeat('b', 40), 'completed')`,
+      [id, repoId],
+    )
+
+    // Claims (migracion 0008). Los dos fixtures reclaman A PROPOSITO el MISMO
+    // issue del MISMO repo: el indice unico de claims vivos es por tenant, asi
+    // que si el aislamiento dependiera de que las claves no chocan, esto
+    // reventaria en vez de pasar por casualidad.
+    const claimGroupId = randomUUID()
+    await client.query(
+      `INSERT INTO claims
+         (id, tenant_id, claim_group_id, repo_id, subject_kind, subject_key,
+          holder_kind, holder_id, holder_label, expires_at)
+       VALUES ($1, $2, $1, $3, 'issue', '15', 'user', $4, $5, now() + interval '1 hour')`,
+      [claimGroupId, id, repoId, userIds[0], `Dev ${slug}`],
     )
   })
 

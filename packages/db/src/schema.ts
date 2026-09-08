@@ -194,5 +194,10 @@ export const DOMAIN_TABLES = [
   'audit_log',
   'github_installations',
   'webhook_deliveries',
+  'graph_nodes',
+  'graph_edges',
+  'graph_files',
+  'graph_ingestions',
+  'claims',
 ] as const
 export type DomainTable = (typeof DOMAIN_TABLES)[number]

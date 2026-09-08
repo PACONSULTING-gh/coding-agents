@@ -34,6 +34,14 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "tree-sitter",
+      "tree-sitter-javascript",
+      "tree-sitter-python",
+      "tree-sitter-typescript"
+    ]
+  },
   "lint-staged": {
     "*.{ts,tsx,mjs,cjs}": [
       "prettier --check",
