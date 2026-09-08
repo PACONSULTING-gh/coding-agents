@@ -165,6 +165,9 @@ importers:
       testcontainers:
         specifier: ^12.1.0
         version: 12.1.0
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
 
 packages:
 

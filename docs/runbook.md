@@ -39,6 +39,67 @@ pnpm install --frozen-lockfile && pnpm -r build && pnpm lint && pnpm -r typechec
 
 ---
 
+## Arranque local completo, de cero a un webhook procesado
+
+Verificado de punta a punta el 8 de septiembre de 2026. El orden **importa**: el
+paso 3 no puede ir antes del 2, y el 4 no puede ir antes del 3.
+
+```bash
+# 1. Configuracion. Si ya tienes un Postgres del sistema en el 5432, cambia
+#    POSTGRES_HOST_PORT / PGBOUNCER_HOST_PORT en el .env; las URLs de conexion
+#    del mismo fichero tienen que apuntar a esos puertos.
+cp .env.example .env && chmod 600 .env
+# rellena las contrasenas con valores generados (openssl rand -hex 16), no con
+# los placeholders
+
+# 2. Infraestructura
+docker compose --env-file .env -f infra/docker-compose.yml up -d
+
+# 3. Base de datos. La migracion 0001 CREA los roles, asi que es la unica que
+#    necesita el rol de administracion; las demas ya corren como app_migrator.
+set -a; . ./.env; set +a
+DATABASE_MIGRATION_URL="$DATABASE_ADMIN_URL" pnpm --filter @coord/db migrate:up --count=1
+psql "$DATABASE_ADMIN_URL" -v ON_ERROR_STOP=1 \
+  -c "ALTER ROLE app_migrator WITH PASSWORD '$APP_MIGRATOR_PASSWORD'" \
+  -c "ALTER ROLE app_runtime  WITH PASSWORD '$APP_RUNTIME_PASSWORD'"
+pnpm --filter @coord/db migrate:up
+
+# 4. Esquema de la cola. NO es opcional y NO lo hace el arranque de la
+#    aplicacion: ver la seccion siguiente.
+pnpm --filter @coord/queue queue:install
+
+# 5. Arrancar
+pnpm -r build
+node apps/webhook/dist/index.js &
+node apps/worker/dist/index.js &
+curl -s "http://localhost:$WEBHOOK_PORT/health"
+# {"status":"ok","checks":{"database":true,"queue":true}}
+```
+
+---
+
+## `permission denied for database` al arrancar el worker o el listener
+
+**Sintoma:** el proceso muere en el arranque con `error: permission denied for
+database coord`, codigo SQLSTATE `42501`, con la traza pasando por
+`Contractor.create` de pg-boss.
+
+**Causa:** falta el paso 4 del arranque local. pg-boss crea su propio esquema la
+primera vez que arranca, y `app_runtime` **no tiene CREATE sobre la base** — la
+migracion 0001 se lo revoca a proposito. El esquema lo instala `app_migrator`.
+
+**Arreglo:** `pnpm --filter @coord/queue queue:install` (necesita
+`DATABASE_MIGRATION_URL`). Es idempotente: se puede correr en cada despliegue, y
+conviene hacerlo, porque tambien aplica las migraciones de esquema de pg-boss
+cuando se sube de version.
+
+**Por que no lo hace la aplicacion sola:** porque entonces `app_runtime`
+necesitaria DDL sobre la base, y eso es exactamente lo que el modelo de minimo
+privilegio de este proyecto existe para impedir. Ver el comentario de cabecera de
+`packages/queue/src/install.ts`.
+
+---
+
 ## El hook de pre-commit rechaza mi commit
 
 - **"hay ficheros staged que no pasan formato o lint"** → el hook VERIFICA, no

@@ -157,3 +157,25 @@ rechazo de envelopes corruptos, reconciliación de opciones— es
 comportamiento del motor, y un doble solo demostraría que el doble hace lo que le hemos
 dicho. Todas las evidencias se afirman leyendo la base de datos, nunca contadores en
 memoria del proceso de test.
+
+## Instalacion del esquema (paso obligatorio, no lo hace el arranque)
+
+pg-boss crea su esquema la primera vez que arranca. Bajo el modelo de minimo
+privilegio de este proyecto eso no puede ocurrir en runtime: `app_runtime` no
+tiene CREATE sobre la base. El esquema lo instala `app_migrator`, una vez:
+
+```bash
+pnpm --filter @coord/queue queue:install   # necesita DATABASE_MIGRATION_URL
+```
+
+Es idempotente y aplica tambien las migraciones de esquema de pg-boss al subir
+de version, asi que va en cada despliegue.
+
+A `app_runtime` se le conceden USAGE y **CREATE sobre el esquema `queue` y solo
+ahi**: pg-boss crea una particion por cola la primera vez que se usa, y eso si
+pasa en runtime. NO se le concede CREATE sobre la base ni sobre `public`.
+
+**Ojo con lo que esto no protege:** las tablas de pg-boss **no llevan RLS**. El
+aislamiento entre tenants dentro de un job lo da el envelope y `runWithTenant`,
+no la base de datos. Cualquiera que pueda leer `queue.job` ve los payloads de
+todos los tenants.

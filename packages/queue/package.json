@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p test/tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "queue:install": "tsx src/install.ts"
   },
   "dependencies": {
     "@coord/core": "workspace:*",
@@ -18,6 +19,7 @@
   },
   "devDependencies": {
     "testcontainers": "^12.1.0",
-    "@testcontainers/postgresql": "^12.1.0"
+    "@testcontainers/postgresql": "^12.1.0",
+    "tsx": "^4.23.13"
   }
 }
