@@ -5,10 +5,21 @@
     "rootDir": "src"
   },
   "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/queue" },
-    { "path": "../../packages/db" },
-    { "path": "../../packages/github" }
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/queue"
+    },
+    {
+      "path": "../../packages/db"
+    },
+    {
+      "path": "../../packages/github"
+    },
+    {
+      "path": "../../packages/graph"
+    }
   ],
   "include": ["src"]
 }

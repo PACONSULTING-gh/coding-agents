@@ -2,7 +2,10 @@ import { closeDatabase, configureDatabase, resolveRuntimeConnectionString } from
 import { PgBossQueue } from '@coord/queue'
 import { pino } from 'pino'
 
-import { registerGithubEventHandlers } from './github-events.js'
+import { registerClaimsPurgeProcessor } from '@coord/graph'
+
+import { registerGithubEventHandlers, registerDomainHandler } from './github-events.js'
+import { createPushIngestionHandler, registerGraphIngestionHandlers } from './graph-ingestion.js'
 
 /**
  * Raiz de composicion del worker. Consume las colas de webhooks que llena
@@ -35,7 +38,29 @@ async function main(): Promise<void> {
 
   // pg-boss necesita la conexion DIRECTA (ver packages/queue).
   const queue = new PgBossQueue({ connectionString: databaseUrl })
+
+  // Ingesta del grafo (epic 02, T02). Necesita un checkout local del
+  // repositorio; clonarlos NO es de esta tarea. Sin `GRAPH_CHECKOUT_ROOT` el
+  // enganche no se registra y se dice en el log: una decision explicita y
+  // visible, no un fallo silencioso (CLAUDE.md 5).
+  const checkoutRoot = process.env['GRAPH_CHECKOUT_ROOT']?.trim()
+  if (checkoutRoot === undefined || checkoutRoot === '') {
+    logger.warn('GRAPH_CHECKOUT_ROOT sin definir: la ingesta del grafo queda desactivada')
+  } else {
+    registerDomainHandler('push', createPushIngestionHandler(queue, logger))
+    await registerGraphIngestionHandlers(queue, logger, { checkoutRoot })
+  }
+
   await registerGithubEventHandlers(queue, logger)
+
+  // Purga del historico de claims (epic 02, T04). NO forma parte de la
+  // correccion —un claim caducado deja de contar por `expires_at`, ver el
+  // ADR 0004—, solo recorta la tabla. El PROCESADOR se registra aqui, una vez
+  // por proceso; la PROGRAMACION es por tenant (`scheduleClaimsPurge` congela
+  // el tenant al programar) y se hace al aprovisionar cada tenant, que todavia
+  // no existe como flujo. Sin esto, el procesador no estaba enchufado a nada.
+  await registerClaimsPurgeProcessor(queue)
+
   await queue.start()
   logger.info('Worker arrancado')
 

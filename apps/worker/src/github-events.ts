@@ -13,6 +13,7 @@ import {
   parseInstallationDescriptor,
   queueNameForEvent,
   type GithubWebhookJob,
+  type SubscribedEvent,
 } from '@coord/github'
 import type { Logger } from 'pino'
 
@@ -41,8 +42,24 @@ import type { Logger } from 'pino'
 /** Handler de dominio por evento. Recibe la transaccion del tenant ya abierta. */
 export type DomainEventHandler = (tx: TenantQuery, job: GithubWebhookJob) => Promise<void>
 
-/** Vacio a proposito: ver el comentario de cabecera. */
+/** Vacio a proposito: se llena desde la raiz de composicion con `registerDomainHandler`. */
 export const domainHandlers: Partial<Record<string, DomainEventHandler>> = {}
+
+/**
+ * Da de alta la logica de dominio de un evento. Se llama desde la raiz de
+ * composicion (`index.ts`), no desde aqui: asi este fichero no tiene que
+ * conocer a los paquetes de dominio y el sentido de las dependencias se
+ * mantiene.
+ *
+ * Registrar dos veces el mismo evento es un error de programacion —el segundo
+ * pisaria al primero en silencio— y falla al arrancar, no en produccion.
+ */
+export function registerDomainHandler(event: SubscribedEvent, handler: DomainEventHandler): void {
+  if (domainHandlers[event] !== undefined) {
+    throw new Error(`Ya hay un handler de dominio registrado para el evento ${event}.`)
+  }
+  domainHandlers[event] = handler
+}
 
 /**
  * El payload del job viene de la tabla de la cola, que la escribio otro
