@@ -178,7 +178,7 @@ jobs:
     # Ver docs/quality-gates.md, fila "IaC".
     steps:
       - uses: actions/checkout@v4
-      - uses: aquasecurity/trivy-action@0.36.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           # Todo el repositorio, no solo `infra/`: el dia que aparezca un
