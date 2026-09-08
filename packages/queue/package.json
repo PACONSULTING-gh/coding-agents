@@ -1,0 +1,23 @@
+{
+  "name": "@coord/queue",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p test/tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@coord/core": "workspace:*",
+    "pg-boss": "^12.30.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "testcontainers": "^12.1.0",
+    "@testcontainers/postgresql": "^12.1.0"
+  }
+}
