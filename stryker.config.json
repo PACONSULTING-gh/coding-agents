@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Mutation testing solo sobre modulos criticos (docs/quality-gates.md T06): correrlo sobre todo el repo seria lentisimo y es exactamente el ruido que CLAUDE.md 2.4 quiere evitar. Se amplia la lista segun se estabilicen mas modulos.",
+  "mutate_comment": "Cada fichero de la lista contiene DECISIONES que un agente podria debilitar sin que los tests se enteren: la validacion de la frontera de confianza (verify-signature, envelope), el mapeo de opciones y el enrutado a la cola de fallidos (pg-boss-queue), la fijacion del contexto de tenant (tenant, client). Un barril de re-exports NO vale como objetivo: Stryker no muta especificadores de modulo, asi que generaria cero mutantes y el umbral se 'superaria' de forma vacia. Por eso packages/queue/src/index.ts salio de esta lista.",
+  "thresholds_comment": "break=60: umbral inicial honesto, no aspiracional. Sube con el tiempo segun se endurezca cada modulo (ver docs/quality-gates.md, seccion 2, capa 2: la fila de mutation testing). Ojo: `thresholds` NO admite propiedades extra en el esquema de Stryker 10; un comentario dentro de ese objeto aborta la ejecucion entera antes de generar un solo mutante. Por eso los comentarios viven en la raiz.",
+  "packageManager": "pnpm",
+  "testRunner": "vitest",
+  "plugins_comment": "Explicito, no por glob. El glob por defecto (`@stryker-mutator/*`) no resuelve bajo pnpm, porque node_modules/@stryker-mutator/vitest-runner es un enlace simbolico a node_modules/.pnpm: Stryker aborta con 'Cannot find TestRunner plugin \"vitest\"'. Nombrarlo lo resuelve por require normal, que si sigue el enlace.",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "reporters": ["progress", "clear-text", "html"],
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "packages/core/src/tenant.ts",
+    "packages/db/src/client.ts",
+    "packages/queue/src/envelope.ts",
+    "packages/queue/src/pg-boss-queue.ts",
+    "packages/github/src/verify-signature.ts"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 60,
+    "break": 60
+  }
+}

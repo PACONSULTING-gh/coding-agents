@@ -1,0 +1,229 @@
+name: CI
+
+# Corre en cada PR y en cada push a main. Los jobs van en paralelo (capa 2 de
+# docs/quality-gates.md) para poder cumplir el criterio de <10 minutos del
+# epic 01 / T06. `concurrency` cancela builds obsoletas cuando llegan pushes
+# nuevos al mismo PR, para no encolar trabajo que ya no importa.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22.14'
+
+jobs:
+  lint:
+    name: Formato y lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `dist/` esta en .gitignore, asi que en un checkout limpio NO existe. Los
+      # paquetes del workspace se importan por su nombre y su `exports` apunta a
+      # `dist/index.js`: sin build, el linteo con tipos no encuentra los .d.ts de
+      # @coord/* y saca cientos de errores `no-unsafe-*`, y `tsc` saca TS2307.
+      # Reproducido borrando dist en local: lint exit=1, typecheck exit=2.
+      - run: pnpm -r build
+      - run: pnpm format:check
+      - run: pnpm lint
+
+  typecheck:
+    name: Type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - run: pnpm -r typecheck
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    # ubuntu-latest trae Docker preinstalado, necesario para los tests de
+    # integracion con testcontainers (Postgres real, CLAUDE.md: "nada de
+    # mocks de lo que no controlas").
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - run: pnpm -r test
+      # NOTA: no se pasa --coverage. Vitest necesita un proveedor de cobertura
+      # (@vitest/coverage-v8) que no esta en el stack aprobado de CLAUDE.md.
+      # Por CLAUDE.md seccion 7 ("necesitar una dependencia nueva que no esta
+      # en la lista aprobada" es una senal de alarma), no se anade aqui sin
+      # decision humana. Este paso queda listo para activarse en cuanto se
+      # apruebe la dependencia: sube lo que haya en **/coverage si existe.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: '**/coverage'
+          retention-days: 14
+          if-no-files-found: ignore
+
+  arch:
+    name: Fitness functions de arquitectura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Este job NO necesita build: `tsconfig.depcruise.json` mapea @coord/* al
+      # codigo FUENTE de cada paquete, precisamente para que las reglas vean las
+      # aristas entre paquetes en vez de resolverlas a dist/ (ver la cabecera de
+      # .dependency-cruiser.cjs). Comprobado en un arbol sin dist: arch exit=0.
+      - run: pnpm arch
+
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    # Contenedor oficial y mantenido, con version fija. Antes se usaba
+    # `semgrep/semgrep-action@v1`, un repositorio ARCHIVADO cuyo propio README
+    # remite a este; ademas se le pasaba un input `generateSarif` que su
+    # action.yml ni declara, y apuntaba a la imagen mutable
+    # `docker://returntocorp/semgrep-agent:v1`.
+    container:
+      image: semgrep/semgrep:1.176.1
+    steps:
+      - uses: actions/checkout@v4
+      # `--severity=ERROR` es lo que hace cumplir el enunciado de T06 ("se falla
+      # solo en severidad alta/critica al principio, para no generar ruido que
+      # la gente aprenda a ignorar"). `semgrep ci` sin conexion a la plataforma
+      # falla ante CUALQUIER hallazgo, sin filtro de severidad: eso es lo que
+      # decia la documentacion y NO era lo que estaba configurado.
+      - run: >-
+          semgrep scan
+          --config=p/security-audit
+          --config=p/secrets
+          --config=p/owasp-top-ten
+          --severity=ERROR
+          --error
+          --metrics=off
+          --exclude=node_modules
+          --exclude=dist
+
+  secrets:
+    name: Secretos (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Binario oficial con checksum FIJADO, no `gitleaks/gitleaks-action@v2`.
+      # Dos motivos: (1) esa accion exige la variable GITLEAKS_LICENSE cuando el
+      # repositorio pertenece a una ORGANIZACION, con lo que el job fallaria
+      # siempre por falta de licencia y no por un hallazgo; (2) el binario usa el
+      # MISMO .gitleaks.toml que el hook local, asi que lo que pasa en local pasa
+      # en CI y al reves.
+      - name: Instalar gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks.tar.gz gitleaks
+      # Cualquier hallazgo bloquea: no hay umbral de severidad para secretos.
+      - name: Escanear el historial completo
+        run: gitleaks git --no-banner --redact --verbose --config .gitleaks.toml
+
+  iac:
+    name: IaC (Trivy)
+    runs-on: ubuntu-latest
+    # T06 pide explicitamente escaneo de IaC.
+    #
+    # HONESTIDAD SOBRE SU ALCANCE DE HOY: comprobado ejecutando
+    # `trivy config` 0.74.0 sobre este repositorio, encuentra CERO ficheros
+    # soportados ("Detected config files num=0"). El unico fichero de infra que
+    # existe es `infra/docker-compose.yml`, y el escaner de misconfiguraciones
+    # de Trivy no parsea docker-compose (soporta Dockerfile, Terraform,
+    # CloudFormation, Kubernetes, Helm, ARM/Bicep); Checkov 3.3.16 tampoco
+    # -su lista de frameworks no incluye docker_compose-.
+    #
+    # El job se deja puesto igualmente para que el primer Dockerfile o modulo de
+    # Terraform que entre este cubierto desde su primer commit. Lo que hoy si
+    # protege el compose es el escaneo de secretos: sus credenciales ya no son
+    # literales, entran por variable de entorno.
+    # Ver docs/quality-gates.md, fila "IaC".
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: config
+          # Todo el repositorio, no solo `infra/`: el dia que aparezca un
+          # Dockerfile, un chart o un modulo de Terraform en cualquier sitio,
+          # queda cubierto desde su primer commit sin tocar este fichero.
+          scan-ref: .
+          skip-dirs: node_modules,dist,.git
+          # Mismo criterio que el resto: solo alto/critico bloquea.
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          hide-progress: true
+
+  deps:
+    name: SCA de dependencias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=high
+
+  ci-ok:
+    name: CI OK
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, arch, sast, secrets, iac, deps]
+    if: always()
+    steps:
+      # Comprobacion POSITIVA: se exige que TODOS los jobs sean 'success'.
+      # La version anterior buscaba 'failure' y 'cancelled', y dejaba pasar
+      # 'skipped': en cuanto alguien pusiera un `if:` a un job, ese job se
+      # saltaria y `ci-ok` seguiria en verde sin que nadie lo notara.
+      - name: Comprobar que todos los jobs pasaron
+        env:
+          RESULTADOS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$RESULTADOS"
+          fallidos=$(echo "$RESULTADOS" | jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"')
+          if [ -n "$fallidos" ]; then
+            echo "Jobs que no terminaron en success:" >&2
+            echo "$fallidos" >&2
+            exit 1
+          fi
+          echo "Todos los jobs terminaron en success."

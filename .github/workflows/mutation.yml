@@ -1,0 +1,46 @@
+name: Mutation testing
+
+# Job separado y NO bloqueante (docs/quality-gates.md T06): Stryker es lento
+# y correrlo en cada PR seria exactamente el ruido que CLAUDE.md 2.4 quiere
+# evitar. Corre programado (semanal) o a mano desde la pestana Actions.
+# Se endurece (se anade a ci-ok) cuando los modulos criticos se estabilicen.
+on:
+  schedule:
+    - cron: '0 6 * * 1' # lunes 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  mutation:
+    name: Stryker (modulos criticos)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Los tests importan los .d.ts de @coord/*, que viven en dist/ y no estan
+      # en el repositorio.
+      - run: pnpm -r build
+      # PASO PREVIO Y BLOQUEANTE: valida la configuracion sin generar mutantes.
+      # Existe porque `stryker.config.json` tenia un comentario dentro de
+      # `thresholds`, el esquema de Stryker 10 no admite propiedades extra ahi,
+      # y `stryker run` abortaba ANTES de generar un solo mutante — pero el
+      # `continue-on-error` del paso siguiente se tragaba el fallo y el job salia
+      # en verde. Un error de configuracion no puede volver a pasar inadvertido.
+      - name: Validar la configuracion de Stryker
+        run: pnpm exec stryker run --dryRunOnly
+      - run: pnpm test:mutation
+        # SIGUE SIENDO NO BLOQUEANTE a proposito: el umbral `break` de cada
+        # modulo aun se esta calibrando (docs/quality-gates.md). Lo que ya NO se
+        # traga es un fallo de configuracion: eso lo caza el paso de arriba.
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-report
+          path: reports/mutation
+          retention-days: 30
+          if-no-files-found: ignore

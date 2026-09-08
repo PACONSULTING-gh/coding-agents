@@ -1,0 +1,24 @@
+# CLAUDE.md 2.2: la cadena Discovery -> PRD -> Epic -> Task -> Issue -> Commit
+# es obligatoria, y "sin issue, no hay commit". Esto es el check determinista
+# de esa regla: sin el, vivia solo en la capa de guia, que la propia
+# constitucion dice que no basta.
+#
+# Se permiten los mensajes que genera git por su cuenta (merge, revert, fixup,
+# squash): no los escribe una persona y bloquearlos rompe el flujo sin aportar
+# trazabilidad.
+msg_file="$1"
+first_line=$(head -n 1 "$msg_file")
+
+case "$first_line" in
+  "Merge "*|"Revert "*|"fixup!"*|"squash!"*|"amend!"*) exit 0 ;;
+esac
+
+if ! printf '%s' "$first_line" | grep -Eq '^Issue #[0-9]+: .+'; then
+  echo "ERROR: el mensaje de commit no referencia ningun issue." >&2
+  echo "" >&2
+  echo "Formato obligatorio (CLAUDE.md 2.2):  Issue #N: descripcion" >&2
+  echo "Recibido: $first_line" >&2
+  echo "" >&2
+  echo "Sin issue no hay commit. Si la tarea no tiene issue, creala antes." >&2
+  exit 1
+fi

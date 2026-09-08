@@ -1,0 +1,42 @@
+# Config de Gitleaks para este repo.
+# Extiende el ruleset por defecto (gitleaks.toml embebido en el binario) y
+# solo anade UNA excepcion, acotada a un fichero: `.env.example`, que
+# CLAUDE.md exige que exista y cuyos valores son todos placeholders
+# ("changeme*"), nunca secretos reales.
+#
+# CLAUDE.md 2.5 / 5: los secretos jamas van en el repo, ni en tests, ni en
+# fixtures. Cualquier fichero que no sea .env.example se escanea con el
+# ruleset completo.
+#
+# ---------------------------------------------------------------------------
+# POR QUE NO HAY UNA LISTA `regexes` AQUI
+# ---------------------------------------------------------------------------
+# La habia (`changeme[a-zA-Z0-9-]*`) y era un agujero: gitleaks evalua `paths`
+# y `regexes` de un mismo bloque de allowlist en OR, asi que el regex eximia
+# hallazgos en CUALQUIER fichero del repo, no solo en .env.example.
+#
+# Verificado con gitleaks 8.30.1 (misma version que fija el CI) en un repo de
+# prueba aislado, un fichero
+# normal.ts con `ghp_changeme1234567890123456789012345678`:
+#   - sin allowlist ............................ detectado (github-pat)
+#   - con paths + regexes ...................... NO detectado  <- el agujero
+#   - con paths + regexes + matchCondition=AND . NO detectado  <- no lo arregla
+#   - solo con paths (esta config) ............. DETECTADO
+# y en los cuatro casos el mismo valor dentro de .env.example queda exento.
+#
+# Es decir: `matchCondition = "AND"` NO cierra el agujero en esta version.
+# Quitar el regex si. Y no hace falta para nada: el allowlist por ruta ya
+# exime .env.example entero, que es lo unico que se queria eximir.
+# Si algun dia hace falta volver a anadir un regex, hay que re-ejecutar esta
+# misma prueba antes de darlo por bueno.
+
+title = 'gitleaks-config-coord-platform'
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders de ejemplo en .env.example, nunca secretos reales"
+paths = [
+  '''\.env\.example$''',
+]

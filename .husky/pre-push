@@ -1,0 +1,10 @@
+# Un lockfile desincronizado tumba los SEIS jobs de Node del CI en su primer
+# paso (`pnpm install --frozen-lockfile`), asi que el fallo no se descubre
+# hasta el PR y no se parece a lo que lo causo. Aqui cuesta menos de un
+# segundo cuando esta sincronizado.
+if ! pnpm install --frozen-lockfile --ignore-scripts >/dev/null 2>&1; then
+  echo "ERROR: pnpm-lock.yaml no esta sincronizado con los package.json." >&2
+  echo "El CI falla en el primer paso de todos sus jobs con este estado." >&2
+  echo "Arreglalo con:  pnpm install --lockfile-only  y commitea el lockfile." >&2
+  exit 1
+fi

@@ -1,0 +1,16 @@
+{
+  "_comment": "SOLO para dependency-cruiser (ver .dependency-cruiser.cjs). Mapea los paquetes del workspace a su codigo fuente para que las fitness functions vean las aristas entre paquetes en vez de resolverlas a dist/ (o no resolverlas). No lo usa ni el build ni el runtime ni vitest.",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "baseUrl": ".",
+    "paths": {
+      "@coord/core": ["packages/core/src/index.ts"],
+      "@coord/db": ["packages/db/src/index.ts"],
+      "@coord/queue": ["packages/queue/src/index.ts"],
+      "@coord/github": ["packages/github/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src", "packages/*/test", "apps/*/src", "apps/*/test"]
+}
