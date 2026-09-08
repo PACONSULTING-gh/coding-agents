@@ -1,0 +1,46 @@
+{
+  "name": "coord-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write . && eslint . --fix",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "arch": "depcruise --config .dependency-cruiser.cjs packages apps",
+    "test:mutation": "stryker run",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.13",
+    "eslint": "^9.39.5",
+    "@eslint/js": "^9.39.0",
+    "typescript-eslint": "^8.70.0",
+    "prettier": "^3.9.6",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.0",
+    "vitest": "^4.1.11",
+    "dependency-cruiser": "^18.2.0",
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,mjs,cjs}": [
+      "prettier --check",
+      "eslint --max-warnings=0"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --check"
+    ]
+  }
+}

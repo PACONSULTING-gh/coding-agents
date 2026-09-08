@@ -1,0 +1,107 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      # Ni siquiera las credenciales de desarrollo local van literales en el
+      # repositorio (CLAUDE.md 5, "secretos: jamas en el repo", sin matices).
+      # Entran por variable o por el .env local, que esta en .gitignore; `:?`
+      # aborta el arranque con un mensaje claro si falta alguna, en vez de
+      # levantar algo a medias. Ver .env.example.
+      POSTGRES_USER: ${POSTGRES_USER:?define POSTGRES_USER (ver .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD (ver .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:?define POSTGRES_DB (ver .env.example)}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # PgBouncer en MODO TRANSACCION delante de Postgres.
+  #
+  # Por que modo transaccion y no session: el limite de conexiones de Postgres
+  # es la primera pared que se toca (CLAUDE.md 3). En modo sesion cada cliente
+  # retiene un backend mientras esta conectado, asi que el pooler no multiplica
+  # nada. En modo transaccion el backend se libera al terminar CADA transaccion,
+  # y unos pocos backends sirven a cientos de clientes.
+  #
+  # El precio de ese modo, y la razon de que packages/db este escrito como esta:
+  # NO HAY ESTADO DE SESION. Dos consultas seguidas del mismo cliente pueden
+  # caer en backends distintos. Por eso el contexto de tenant se fija con
+  # `set_config('app.tenant_id', $1, true)` dentro de una transaccion y nunca
+  # con un `SET` de sesion. Ver el comentario de cabecera de
+  # packages/db/src/client.ts antes de tocar nada de aqui.
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.25.2-p0
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # La contrasena NUNCA esta en este fichero: entra por variable de entorno
+      # (o por el .env local, que esta en .gitignore). Si falta, `:?` aborta el
+      # arranque con un mensaje claro en vez de levantar algo a medias.
+      DATABASE_URL: >-
+        postgres://app_runtime:${APP_RUNTIME_PASSWORD:?define APP_RUNTIME_PASSWORD (ver .env.example)}@postgres:5432/coord
+      # El entrypoint de la imagen escribe el userlist.txt DENTRO del contenedor
+      # a partir de DATABASE_URL. No hay ningun fichero con credenciales en el
+      # repositorio (ver infra/pgbouncer/README.md).
+      AUTH_TYPE: scram-sha-256
+      LISTEN_PORT: '6432'
+
+      # Consola de PgBouncer en SOLO LECTURA para app_runtime. Sin esto, la
+      # imagen deja `admin_users = postgres` y `SHOW POOLS` -el procedimiento de
+      # diagnostico del runbook- responde "FATAL: not allowed" justo cuando
+      # alguien esta investigando saturacion del pool. `stats_users` da acceso a
+      # SHOW POOLS/CLIENTS/SERVERS/STATS y a nada mas: no permite PAUSE, RESUME,
+      # RELOAD ni KILL. Ver infra/pgbouncer/README.md.
+      STATS_USERS: app_runtime
+
+      POOL_MODE: transaction
+      # Conexiones de CLIENTE que PgBouncer acepta. Alto a proposito: es barato,
+      # y es justo lo que compramos con el pooler.
+      MAX_CLIENT_CONN: '1000'
+      # Conexiones REALES contra Postgres por (base de datos, usuario). Modesto
+      # a proposito: 20 backends bastan para servir a esos 1000 clientes si las
+      # transacciones son cortas. Si esto se queda corto, el sintoma es espera
+      # en `query_wait_timeout`, no errores de conexion.
+      DEFAULT_POOL_SIZE: '20'
+      MIN_POOL_SIZE: '2'
+      RESERVE_POOL_SIZE: '5'
+      RESERVE_POOL_TIMEOUT: '3'
+
+      # server_reset_query: la limpieza que PgBouncer hace a un backend antes de
+      # cederlo a otro cliente. En modo transaccion NO se ejecuta, porque
+      # server_reset_query_always=0 limita la limpieza al modo sesion: aqui la
+      # transaccion ya revierte por si sola todo lo que se fijo con
+      # `set_config(..., true)`, y correr un DISCARD ALL por transaccion seria
+      # un viaje de ida y vuelta regalado.
+      #
+      # server_reset_query_always=1 seria un ERROR aqui: convertiria cada
+      # transaccion en dos. Y a la inversa, si alguien pasa POOL_MODE a session,
+      # este DISCARD ALL vuelve a ser imprescindible para que un cliente no
+      # herede el estado del anterior. Por eso se deja declarado.
+      SERVER_RESET_QUERY: DISCARD ALL
+      SERVER_RESET_QUERY_ALWAYS: '0'
+
+      # `pg` no envia extra_float_digits, pero otros drivers si; y `options` lo
+      # envian las herramientas de linea de comandos. Sin esto, PgBouncer
+      # rechaza la conexion en el startup packet.
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
+      # Un backend no vive para siempre: se recicla para repartir carga y para
+      # que un cambio de configuracion del servidor llegue sin reiniciar nada.
+      SERVER_LIFETIME: '3600'
+      SERVER_IDLE_TIMEOUT: '600'
+      LOG_POOLER_ERRORS: '1'
+    ports:
+      - '6432:6432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 6432 -U app_runtime -d coord']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

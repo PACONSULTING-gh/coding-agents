@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/db" },
+    { "path": "packages/queue" },
+    { "path": "packages/github" },
+    { "path": "apps/webhook" },
+    { "path": "apps/worker" }
+  ]
+}
