@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/queue" },
+    { "path": "../../packages/github" },
+    { "path": "../../packages/db" }
+  ],
+  "include": ["src"]
+}

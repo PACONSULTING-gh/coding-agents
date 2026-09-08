@@ -1,0 +1,21 @@
+{
+  "name": "@coord/github",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p test/tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@coord/core": "workspace:*",
+    "octokit": "^5.0.5",
+    "@octokit/app": "^16.1.4",
+    "@octokit/webhooks": "^14.2.0",
+    "@octokit/auth-app": "^8.3.1"
+  }
+}
