@@ -58,7 +58,7 @@ module.exports = {
       comment:
         'packages/core es el dominio: no puede depender de infraestructura ni de apps (CLAUDE.md 3, dependencias apuntan hacia dentro).',
       from: { path: '^packages/core' },
-      to: { path: '^(apps|packages/(db|queue|github|graph))' },
+      to: { path: '^(apps|packages/(db|queue|github|graph|agents))' },
     },
     {
       name: 'pg-boss-solo-en-queue',
@@ -66,6 +66,17 @@ module.exports = {
       comment: 'pg-boss es un detalle de implementacion de packages/queue, oculto tras QueuePort.',
       from: { pathNot: '^packages/queue' },
       to: { path: `${NODE_MODULES}pg-boss(/|$)` },
+    },
+    {
+      name: 'anthropic-sdk-solo-en-agents',
+      severity: 'error',
+      comment:
+        'El SDK de Anthropic es el detalle de implementacion de packages/agents, oculto tras ' +
+        'LlmPort (packages/core/src/ports/llm.ts). Mismo principio que pg-boss-solo-en-queue: ' +
+        'el proveedor de LLM tiene que ser reemplazable, y no lo es si el epic 05 entero ' +
+        '(generador de tests, Verifier, informe) importa el SDK directamente.',
+      from: { pathNot: '^packages/agents' },
+      to: { path: `${NODE_MODULES}@anthropic-ai/sdk(/|$)` },
     },
     {
       name: 'pg-solo-en-db',
@@ -110,6 +121,26 @@ module.exports = {
         'El cliente de la GitHub App y octokit son un detalle de implementacion de packages/github.',
       from: { pathNot: '^packages/github' },
       to: { path: `${NODE_MODULES}(@octokit/[^/]+|octokit)(/|$)` },
+    },
+    {
+      name: 'generador-de-tests-no-lee-del-disco',
+      severity: 'error',
+      comment:
+        'El primer criterio de aceptacion de T02 (epic 05) dice que el agente generador de ' +
+        'tests NO HA VISTO la implementacion, y eso solo se cumple por construccion si el ' +
+        'modulo no tiene NINGUNA via para leerla. La cabecera de test-generator.ts lo afirma; ' +
+        'esta regla es lo que lo hace cumplir. Prohibido node:fs, node:fs/promises y ' +
+        'node:child_process, y prohibido importar generated-tests-fs.ts (que si toca el disco). ' +
+        'verifier.ts va en la misma lista por el mismo motivo: su aislamiento (primer criterio ' +
+        'de T04) se cae en cuanto pueda ir a buscar contexto por su cuenta.',
+      from: {
+        path: '^packages/agents/src/verification/(test-generator|verifier)\\.ts$',
+      },
+      to: {
+        path:
+          '^(node:)?(fs|fs/promises|child_process)$' +
+          '|^packages/agents/src/verification/generated-tests-fs\\.ts$',
+      },
     },
     {
       name: 'no-orphans',

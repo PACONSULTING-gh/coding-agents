@@ -6,6 +6,7 @@
     { "path": "packages/queue" },
     { "path": "packages/github" },
     { "path": "packages/graph" },
+    { "path": "packages/agents" },
     { "path": "apps/webhook" },
     { "path": "apps/worker" }
   ]
