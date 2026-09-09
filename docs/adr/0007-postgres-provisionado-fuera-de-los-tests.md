@@ -1,6 +1,6 @@
 # ADR 0007 — El Postgres de los tests de integración se provisiona fuera del proceso de test
 
-**Estado:** Propuesta
+**Estado:** Propuesta (con la parte de `packages/queue` ya implementada y medida)
 
 **Contexto de origen:** issue #26, abierto desde el epic 05 / T03 (issue #23) al
 descubrir que el gate de mutation testing estaba en verde escondiendo mutantes
@@ -57,18 +57,32 @@ onboarding. Por eso va por ADR.
 
 ## Decisión
 
-**Los tests de integración reciben la URL de un Postgres ya en marcha por
-variable de entorno (`TEST_DATABASE_URL`), y dejan de levantarlo ellos.** Lo
-provisiona `infra/docker-compose.yml` en local —el mismo fichero que ya existe y
-que el test de PgBouncer ya lee— y un bloque `services:` en el workflow de CI.
+**Los tests de integración adquieren su Postgres según esta política, en este
+orden:**
 
-Cada fichero de test **crea su propia base de datos** dentro de ese servidor y la
-borra al terminar. El aislamiento pasa de ser por contenedor a ser por base de
-datos, que es donde de verdad hace falta.
+| Situación                                | Qué hace                                       |
+| ---------------------------------------- | ---------------------------------------------- |
+| `TEST_DATABASE_URL` definida             | Usa ese servidor                               |
+| No definida                              | Levanta **un** contenedor, una vez por proceso |
+| No definida **y corriendo bajo Stryker** | **Falla en voz alta. No mide.**                |
+
+Y **cada fichero de test crea su propia base de datos** dentro del servidor que
+le toque, y la borra al terminar. El aislamiento pasa de ser por contenedor a
+ser por base de datos, que es donde de verdad hace falta.
+
+La tercera fila es la que hace que esto funcione. El problema medido —una
+puntuación de mutación que sale de los timeouts— **solo aparece bajo Stryker**,
+y se puede detectar que estamos bajo Stryker de forma fiable: su runner de
+Vitest inyecta un fichero de setup que crea `globalThis.__stryker__` en el
+proceso de test. Así que no hace falta elegir entre medir bien y arrancar sin
+fricción: se puede exigir el servidor externo **solo donde importa**.
+
+En local, `infra/docker-compose.yml` —el mismo fichero que ya existe y que el
+test de PgBouncer ya lee— y en CI un bloque `services:`.
 
 **Una excepción, explícita:** `packages/db/test/pgbouncer.test.ts` sigue con
-testcontainers. Ese test pone un PgBouncer **delante** del Postgres sobre una red
-de Docker para verificar el modo transacción, y eso necesita controlar la
+testcontainers siempre. Ese test pone un PgBouncer **delante** del Postgres sobre
+una red de Docker para verificar el modo transacción, y eso necesita controlar la
 topología, no solo tener una URL. Es un único fichero, no está en la lista
 `mutate`, y su coste es un contenedor por ejecución de la suite, no por mutante.
 
@@ -79,44 +93,87 @@ topología, no solo tener una URL. Es un único fichero, no está en la lista
 - La puntuación de mutation testing pasa a medir lo que dice medir. `client.ts`,
   `pg-boss-queue.ts` y los módulos de `packages/graph` pueden volver a la lista
   `mutate`, y los ~96 supervivientes reales dejan de estar escondidos.
+- **No se puede volver a medir deshonestamente sin enterarse.** Es la propiedad
+  que se le exigió a este ADR y que hundió a `withReuse()`: o hay servidor
+  externo, o `pnpm test:mutation` se niega a correr.
 - Deja de hacer falta `concurrency: 4` fijada en `stryker.config.json`, que hoy
   está ahí solo para que la cifra sea comparable entre máquinas.
-- La suite entera es más rápida para todo el mundo, no solo bajo Stryker.
+- La suite es más rápida para quien levante el compose, sin obligar a nadie.
 
-**Lo que se sacrifica, y es lo importante de este ADR:**
+**Lo que NO se sacrifica, y en la primera versión de este ADR sí:** `pnpm test`
+sigue funcionando sobre un checkout limpio sin arrancar nada. La versión anterior
+daba eso por perdido y proponía `docker compose up -d` como requisito de
+onboarding. Era un precio que no hacía falta pagar.
 
-- **`pnpm test` deja de funcionar sobre un checkout limpio sin nada arrancado.**
-  Hoy funciona; con esto hay que hacer `docker compose up -d` antes. Es una
-  regresión real en la experiencia de desarrollo y es el precio principal. Se
-  mitiga fallando en voz alta: si `TEST_DATABASE_URL` no está o no responde, el
-  mensaje tiene que decir literalmente qué comando ejecutar, no un
-  `ECONNREFUSED` pelado.
+**Lo que sí se acepta:**
+
+- **Dos caminos de adquisición en vez de uno**, y por tanto un modo en el que
+  casi nadie corre a diario (el externo) que puede pudrirse sin que se note. Se
+  contiene haciendo que CI use SIEMPRE el camino externo: si se rompe, se rompe
+  en rojo y en cada PR, no el día que alguien mida mutación.
 - **Los roles son del servidor, no de la base.** `app_migrator`, `app_runtime` y
   el rol de mínimo privilegio de `install.test.ts` se crean hoy dentro de un
   contenedor recién hecho. Sobre un servidor compartido hay que nombrarlos por
-  ejecución, o el segundo arranque muere con `role already exists`. Esto ya se
-  comprobó en el intento revertido.
+  ejecución, o el segundo arranque muere con `role already exists`. Ya
+  comprobado en el intento revertido.
 - **Un servidor sucio puede hacer que un test pase o falle por razones ajenas al
-  código.** La base por fichero, creada y borrada, es lo que lo contiene; hay que
-  vigilar que nadie escriba en la base por defecto.
+  código.** La base por fichero, creada y borrada, es lo que lo contiene.
+- **Los tests de `packages/queue` pasan a depender del soporte de test de
+  `packages/db`** para hablar SQL, porque la fitness function `pg-solo-en-db`
+  reserva el driver a ese paquete y con un servidor externo ya no se puede usar
+  el `psql` de dentro del contenedor. Hay precedente: `packages/agents` ya
+  importa `packages/db/test/support/database.ts`.
 
 **Lo que hay que vigilar:** que las bases de datos huérfanas no se acumulen si un
 test muere sin borrar la suya. Un barrido de las que empiecen por el prefijo
 convenido, al arrancar la suite, es más fiable que confiar en el `afterAll`.
 
+## Comprobado sobre `packages/queue`
+
+Antes de escribir esta sección el ADR era una propuesta razonada. Ahora está
+medido: `packages/queue` ya sigue esta política (`packages/db/test/support/postgres-server.ts`
+y `packages/queue/test/postgres.ts`).
+
+|                                  | Contenedor por mutante | Servidor externo |
+| -------------------------------- | ---------------------- | ---------------- |
+| Puntuación de `pg-boss-queue.ts` | **76,47 %**            | **42,86 %**      |
+| Mutantes muertos                 | 2                      | **72**           |
+| Timeouts                         | 180                    | 30               |
+| Supervivientes                   | 0                      | **80**           |
+| Duración de la pasada            | ~25 min                | **8 min 12 s**   |
+| Contenedores vivos a la vez      | 28 y subiendo          | **0**            |
+
+La puntuación **baja** porque la de antes era falsa. Los 80 supervivientes y los
+56 mutantes sin cobertura ya estaban ahí; lo único que cambia es que ahora se
+ven.
+
+Y la suite normal no sufre: `pnpm test` del paquete pasa de 26 s a **24 s** con
+contenedor (uno por proceso en vez de uno por fichero) y a **16,5 s** contra un
+servidor externo. Los 27 tests siguen en verde.
+
+**Lo que esto deja pendiente:** 42,86 % está por debajo del `break=60`, así que
+`pg-boss-queue.ts` **no vuelve todavía** a la lista `mutate`. Dejarlo entrar
+pondría el workflow semanal en rojo de forma permanente, y un gate que siempre
+está rojo se acaba ignorando —que es el mismo fallo, por el otro extremo—.
+Entra cuando los supervivientes bajen del umbral (issue #26).
+
 ## Alternativas descartadas
 
 - **`withReuse()` de testcontainers.** Marca el contenedor como reutilizable por
   hash y el reaper no lo recoge, así que el siguiente proceso lo encuentra.
-  Resuelve el problema técnico y es menos invasivo. Se descarta por dos razones:
-  requiere `TESTCONTAINERS_REUSE_ENABLE=true` en el entorno de cada máquina —una
-  variable que si falta degrada el comportamiento **en silencio**, volviendo a un
-  contenedor por mutante sin que nadie se entere— y deja un contenedor vivo en la
-  máquina del desarrollador indefinidamente. Además, varios trabajadores de
-  Stryker compartiendo un contenedor necesitan una base de datos por trabajador
-  igualmente: el trabajo de aislamiento por base hay que hacerlo en las dos
-  opciones, así que la que además elimina testcontainers del camino caliente sale
-  ganando.
+  Resuelve el problema técnico y es menos invasivo. Se descarta porque requiere
+  `TESTCONTAINERS_REUSE_ENABLE=true` en el entorno de cada máquina, y **si esa
+  variable falta, degrada en silencio**: se vuelve a un contenedor por mutante y
+  la puntuación vuelve a salir de los timeouts sin que nadie se entere. Para un
+  problema que consiste exactamente en una medida que mentía sin avisar, ese es
+  el peor modo de fallo posible. Además deja un contenedor vivo en la máquina
+  indefinidamente, y varios trabajadores de Stryker compartiéndolo necesitan una
+  base de datos por trabajador igualmente: el trabajo de aislamiento por base hay
+  que hacerlo en las dos opciones.
+
+- **Exigir siempre el servidor externo** (la primera versión de este ADR). Mide
+  igual de bien, pero rompe `pnpm test` sobre un checkout limpio a cambio de
+  nada: el problema solo existe bajo Stryker, y bajo Stryker se puede detectar.
 
 - **Dejarlo como está y aceptar que esos módulos no se miden.** Es lo que hay hoy
   y es defendible a corto plazo: están fuera de la lista `mutate` con el porqué

@@ -1,59 +1,46 @@
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
+import {
+  createTestDatabase,
+  sweepOrphanTestDatabases,
+  type TestDatabase,
+} from '../../db/test/support/postgres-server.js'
 
 /**
  * Postgres DE VERDAD para los tests de integracion. Nada de dobles: lo que se
  * comprueba (exactly-once bajo concurrencia, backoff, cola de fallidos) es
  * comportamiento del motor y de pg-boss, no de nuestro codigo, asi que un mock
  * solo demostraria que el mock hace lo que le hemos dicho (CLAUDE.md 5).
+ *
+ * ===========================================================================
+ * DE DONDE SALE EL SERVIDOR, Y POR QUE NO LO LEVANTA ESTE FICHERO
+ * ===========================================================================
+ * La politica esta en `packages/db/test/support/postgres-server.ts` y la fija
+ * el ADR 0007: `TEST_DATABASE_URL` si esta definida, un contenedor por proceso
+ * si no, y un fallo ruidoso si estamos bajo Stryker sin servidor externo.
+ *
+ * Antes cada fichero de este paquete levantaba SU contenedor en `beforeAll`.
+ * Bajo mutation testing eso salia a un contenedor por MUTANTE —medidos 28
+ * Postgres vivos a la vez— y la puntuacion acababa saliendo de los timeouts en
+ * vez de los tests (issue #26).
+ *
+ * VIVE EN packages/db A PROPOSITO: la fitness function `pg-solo-en-db` reserva
+ * el driver `pg` a ese paquete, y con un servidor externo ya no vale el truco
+ * de ejecutar `psql` dentro del contenedor. Este paquete NO adquiere acceso
+ * directo a Postgres: importa un helper de test del paquete que si lo tiene,
+ * igual que ya hace `packages/agents`.
  */
-export const POSTGRES_IMAGE = 'postgres:16-alpine'
 
-export async function startPostgres(): Promise<StartedPostgreSqlContainer> {
-  return await new PostgreSqlContainer(POSTGRES_IMAGE).start()
-}
+export type { TestDatabase }
+export { sweepOrphanTestDatabases }
 
 /**
- * Ejecuta SQL con el `psql` que ya viene en la imagen, en vez de abrir un
- * cliente `pg` desde el test.
+ * Una base de datos aislada para un fichero de test.
  *
- * Motivo arquitectonico, no de comodidad: la fitness function de
- * dependency-cruiser reserva el driver `pg` a packages/db (regla
- * `pg-solo-en-db`). Este paquete no debe adquirir acceso directo a Postgres ni
- * siquiera en sus tests.
+ * El aislamiento que estos tests necesitan es el de DATOS, no el de proceso:
+ * `install.test.ts` exige una base SIN el esquema `queue` y `pg-boss-queue.test.ts`
+ * lo crea. Una base por fichero da eso; compartir el servidor no lo rompe.
  */
-export async function sql(container: StartedPostgreSqlContainer, text: string): Promise<string[]> {
-  const result = await container.exec(
-    [
-      'psql',
-      '-v',
-      'ON_ERROR_STOP=1',
-      '-U',
-      container.getUsername(),
-      '-d',
-      container.getDatabase(),
-      '-tA',
-      '-c',
-      text,
-    ],
-    { env: { PGPASSWORD: container.getPassword() } },
-  )
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `psql termino con codigo ${result.exitCode}: ${result.stderr || result.output}\nSQL: ${text}`,
-    )
-  }
-  return result.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '')
-}
-
-/** Primera celda del resultado, o `undefined` si no hubo filas. */
-export async function sqlValue(
-  container: StartedPostgreSqlContainer,
-  text: string,
-): Promise<string | undefined> {
-  return (await sql(container, text)).at(0)
+export async function startTestDatabase(label: string): Promise<TestDatabase> {
+  return createTestDatabase(label)
 }
 
 export function delay(ms: number): Promise<void> {

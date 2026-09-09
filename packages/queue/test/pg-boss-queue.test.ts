@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto'
 
 import { MissingTenantContextError, currentTenant, runWithTenant } from '@coord/core'
-import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 import { QueueNotStartedError } from '../src/errors.js'
 import { PgBossQueue } from '../src/pg-boss-queue.js'
-import { delay, sql, sqlValue, startPostgres, waitFor } from './postgres.js'
+import { delay, startTestDatabase, waitFor, type TestDatabase } from './postgres.js'
 
 /**
  * Tests de integracion de la implementacion de QueuePort sobre pg-boss.
@@ -17,7 +16,7 @@ import { delay, sql, sqlValue, startPostgres, waitFor } from './postgres.js'
  * ejecuto una vez" de "el job se ejecuto una vez en este proceso".
  */
 
-let container: StartedPostgreSqlContainer
+let db: TestDatabase
 let connectionString: string
 
 /** Instancias creadas por cada test, para pararlas pase lo que pase. */
@@ -35,11 +34,9 @@ function newQueue(): PgBossQueue {
 }
 
 beforeAll(async () => {
-  container = await startPostgres()
-  connectionString = container.getConnectionUri()
-  await sql(
-    container,
-    `CREATE TABLE job_run (
+  db = await startTestDatabase('pgboss')
+  connectionString = db.url
+  await db.sql(`CREATE TABLE job_run (
        id           bigserial PRIMARY KEY,
        queue_name   text        NOT NULL,
        job_id       uuid        NOT NULL,
@@ -47,8 +44,7 @@ beforeAll(async () => {
        worker_index int         NOT NULL,
        note         text,
        ran_at       timestamptz NOT NULL DEFAULT clock_timestamp()
-     )`,
-  )
+     )`)
 }, 120_000)
 
 afterEach(async () => {
@@ -58,7 +54,9 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  await container.stop()
+  // Se borra la BASE, no el servidor: el servidor es compartido por el proceso
+  // y puede ser externo (ADR 0007).
+  await db.drop()
 })
 
 /** Registra en la base de datos que un handler se ejecuto. */
@@ -70,18 +68,12 @@ async function recordRun(args: {
   note?: string
 }): Promise<void> {
   const note = args.note === undefined ? 'NULL' : `'${args.note}'`
-  await sql(
-    container,
-    `INSERT INTO job_run (queue_name, job_id, tenant_id, worker_index, note)
-     VALUES ('${args.queueName}', '${args.jobId}', '${args.tenantId}', ${args.workerIndex}, ${note})`,
-  )
+  await db.sql(`INSERT INTO job_run (queue_name, job_id, tenant_id, worker_index, note)
+     VALUES ('${args.queueName}', '${args.jobId}', '${args.tenantId}', ${args.workerIndex}, ${note})`)
 }
 
 async function countRuns(queueName: string): Promise<number> {
-  const value = await sqlValue(
-    container,
-    `SELECT count(*) FROM job_run WHERE queue_name = '${queueName}'`,
-  )
+  const value = await db.sqlValue(`SELECT count(*) FROM job_run WHERE queue_name = '${queueName}'`)
   return Number(value)
 }
 
@@ -125,7 +117,7 @@ describe('exactly-once con varios workers', () => {
 
     expect(await countRuns(queueName)).toBe(1)
 
-    const state = await sqlValue(container, `SELECT state FROM queue.job WHERE id = '${jobId}'`)
+    const state = await db.sqlValue(`SELECT state FROM queue.job WHERE id = '${jobId}'`)
     expect(state).toBe('completed')
   })
 })
@@ -229,8 +221,7 @@ describe('propagacion del contexto de tenant', () => {
     }
     expect(new Set(observations.map((o) => o.expected))).toEqual(new Set([tenantA, tenantB]))
 
-    const tenantsPersisted = await sql(
-      container,
+    const tenantsPersisted = await db.sqlColumn(
       `SELECT DISTINCT tenant_id FROM job_run WHERE queue_name = '${queueName}' ORDER BY 1`,
     )
     expect(new Set(tenantsPersisted)).toEqual(new Set([tenantA, tenantB]))
@@ -278,8 +269,7 @@ describe('reintentos', () => {
     )
 
     // Un intento por cada retryCount: 0, 1, 2. Ni uno de mas.
-    const notes = await sql(
-      container,
+    const notes = await db.sqlColumn(
       `SELECT note FROM job_run WHERE queue_name = '${queueName}' ORDER BY ran_at`,
     )
     expect(notes).toEqual(['intento-0', 'intento-1', 'intento-2'])
@@ -290,11 +280,9 @@ describe('reintentos', () => {
     // aleatorio, asi que una comparacion directa entre muestras seria
     // intermitente por diseno. El suelo, en cambio, es determinista y ya
     // demuestra el crecimiento: 1 s, luego 2 s.
-    const gapsRaw = await sql(
-      container,
-      `SELECT EXTRACT(EPOCH FROM ran_at - lag(ran_at) OVER (ORDER BY ran_at))
-         FROM job_run WHERE queue_name = '${queueName}' ORDER BY ran_at OFFSET 1`,
-    )
+    const gapsRaw =
+      await db.sqlColumn(`SELECT EXTRACT(EPOCH FROM ran_at - lag(ran_at) OVER (ORDER BY ran_at))
+         FROM job_run WHERE queue_name = '${queueName}' ORDER BY ran_at OFFSET 1`)
     const gaps = gapsRaw.map(Number)
     expect(gaps).toHaveLength(retryLimit)
     expect(gaps[0]).toBeGreaterThanOrEqual(retryDelaySeconds * 1)
@@ -313,22 +301,17 @@ describe('reintentos', () => {
     await waitFor(
       'el job termina en estado failed',
       async () =>
-        (await sqlValue(container, `SELECT state FROM queue.job WHERE id = '${jobId}'`)) ===
-        'failed',
+        (await db.sqlValue(`SELECT state FROM queue.job WHERE id = '${jobId}'`)) === 'failed',
     )
     await waitFor(
       'aparece la copia en la cola de fallidos',
       async () =>
         Number(
-          await sqlValue(
-            container,
-            `SELECT count(*) FROM queue.job WHERE name = '${deadLetterName}'`,
-          ),
+          await db.sqlValue(`SELECT count(*) FROM queue.job WHERE name = '${deadLetterName}'`),
         ) === 1,
     )
 
-    const deadLettered = await sql(
-      container,
+    const deadLettered = await db.sqlColumn(
       `SELECT source_id::text FROM queue.job WHERE name = '${deadLetterName}'`,
     )
     expect(deadLettered).toEqual([jobId])
@@ -348,10 +331,7 @@ describe('contexto de tenant obligatorio', () => {
       MissingTenantContextError,
     )
 
-    const jobs = await sqlValue(
-      container,
-      `SELECT count(*) FROM queue.job WHERE name = '${queueName}'`,
-    )
+    const jobs = await db.sqlValue(`SELECT count(*) FROM queue.job WHERE name = '${queueName}'`)
     expect(Number(jobs)).toBe(0)
   })
 })
@@ -372,8 +352,7 @@ describe('envelope invalido: frontera de confianza', () => {
 
     // Se corrompe la fila como lo haria un productor de otra version: el
     // envelope deja de cumplir el contrato.
-    await sql(
-      container,
+    await db.sql(
       `UPDATE queue.job SET data = '{"roto":true}', start_after = now() WHERE id = '${jobId}'`,
     )
 
@@ -393,10 +372,7 @@ describe('envelope invalido: frontera de confianza', () => {
       'el job corrupto aparece en la cola de fallidos',
       async () =>
         Number(
-          await sqlValue(
-            container,
-            `SELECT count(*) FROM queue.job WHERE name = '${deadLetterName}'`,
-          ),
+          await db.sqlValue(`SELECT count(*) FROM queue.job WHERE name = '${deadLetterName}'`),
         ) === 1,
     )
 
@@ -405,17 +381,13 @@ describe('envelope invalido: frontera de confianza', () => {
     expect(handlerEjecutado).toBe(false)
     expect(await countRuns(queueName)).toBe(0)
 
-    const dlqSource = await sql(
-      container,
+    const dlqSource = await db.sqlColumn(
       `SELECT source_id::text FROM queue.job WHERE name = '${deadLetterName}'`,
     )
     expect(dlqSource).toEqual([jobId])
 
     // Y NO se reintento: reintentar no va a hacer valido un payload roto.
-    const retryCount = await sqlValue(
-      container,
-      `SELECT retry_count FROM queue.job WHERE id = '${jobId}'`,
-    )
+    const retryCount = await db.sqlValue(`SELECT retry_count FROM queue.job WHERE id = '${jobId}'`)
     expect(Number(retryCount)).toBe(0)
   })
 })
@@ -446,16 +418,12 @@ describe('deduplicacion por clave de unicidad', () => {
     expect(segundo).toMatch(/^[0-9a-f-]{36}$/)
     expect(segundo).not.toBe(primero)
 
-    const total = await sqlValue(
-      container,
-      `SELECT count(*) FROM queue.job WHERE name = '${queueName}'`,
-    )
+    const total = await db.sqlValue(`SELECT count(*) FROM queue.job WHERE name = '${queueName}'`)
     expect(Number(total)).toBe(2)
 
     // Y lo que si esta garantizado: ningun `enqueue` devuelve un id que no
     // exista en la tabla. Ese es el contrato que protege DuplicateJobError.
-    const existentes = await sql(
-      container,
+    const existentes = await db.sqlColumn(
       `SELECT id::text FROM queue.job WHERE name = '${queueName}' ORDER BY 1`,
     )
     expect(existentes.slice().sort()).toEqual([primero, segundo].sort())
@@ -477,11 +445,12 @@ describe('reconciliacion de las opciones de la cola', () => {
     await runWithTenant({ tenantId }, async () => primera.enqueue(queueName, { n: 1 }))
     await primera.stop()
 
-    const antes = await sql(
-      container,
+    const antes = await db.sql(
       `SELECT retry_limit, retry_delay, retry_backoff FROM queue.queue WHERE name = '${queueName}'`,
     )
-    expect(antes).toEqual(['7|11|f'])
+    // Fila entera y con sus tipos, en vez de la cadena '7|11|f' que devolvia
+    // `psql -tA`: se lee mejor y no depende del formateo de una herramienta.
+    expect(antes).toEqual([{ retry_limit: 7, retry_delay: 11, retry_backoff: false }])
 
     // `createQueue` es un INSERT ... ON CONFLICT DO NOTHING: sin reconciliacion,
     // esta segunda instancia dejaba la cola con los valores de la primera y sus
@@ -495,15 +464,13 @@ describe('reconciliacion de las opciones de la cola', () => {
     await segunda.start()
     await runWithTenant({ tenantId }, async () => segunda.enqueue(queueName, { n: 2 }))
 
-    const despues = await sql(
-      container,
+    const despues = await db.sql(
       `SELECT retry_limit, retry_delay, retry_backoff FROM queue.queue WHERE name = '${queueName}'`,
     )
-    expect(despues).toEqual(['3|2|t'])
+    expect(despues).toEqual([{ retry_limit: 3, retry_delay: 2, retry_backoff: true }])
 
     // Y la cola de fallidos sigue enganchada: reconciliar no la desengancha.
-    const deadLetter = await sqlValue(
-      container,
+    const deadLetter = await db.sqlValue(
       `SELECT dead_letter FROM queue.queue WHERE name = '${queueName}'`,
     )
     expect(deadLetter).toBe(PgBossQueue.deadLetterQueueName(queueName))

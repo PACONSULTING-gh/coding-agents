@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto'
 
 import { currentTenant, runWithTenant } from '@coord/core'
-import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 import { installQueueSchema } from '../src/install.js'
 import { PgBossQueue } from '../src/pg-boss-queue.js'
-import { sql, sqlValue, startPostgres, waitFor } from './postgres.js'
+import { startTestDatabase, waitFor, type TestDatabase } from './postgres.js'
 
 /**
  * REGRESION de un fallo real, encontrado arrancando el sistema completo en
@@ -22,10 +21,17 @@ import { sql, sqlValue, startPostgres, waitFor } from './postgres.js'
  * despliega. Este fija el contrato con un rol de minimo privilegio de verdad.
  */
 
-const RUNTIME_ROLE = 'least_privilege_runtime'
+/**
+ * El nombre del rol se deriva del de la base de datos, y NO es cosmetico: un rol
+ * de Postgres pertenece al SERVIDOR, no a la base. Desde que el servidor es
+ * compartido (ADR 0007) un nombre fijo haria que el segundo arranque de este
+ * fichero —el segundo mutante, en una pasada de Stryker— muriera con "role
+ * already exists".
+ */
+let RUNTIME_ROLE: string
 const RUNTIME_PASSWORD = 'test-only-not-a-secret'
 
-let container: StartedPostgreSqlContainer
+let db: TestDatabase
 /** Conexion del dueno: puede hacer DDL. Es el equivalente a app_migrator. */
 let ownerUri: string
 /** Conexion de la aplicacion: sin CREATE sobre la base. Es app_runtime. */
@@ -43,15 +49,15 @@ function newQueue(connectionString: string): PgBossQueue {
 }
 
 beforeAll(async () => {
-  container = await startPostgres()
-  ownerUri = container.getConnectionUri()
+  db = await startTestDatabase('install')
+  ownerUri = db.url
+  RUNTIME_ROLE = `lpr_${db.name}`
 
-  await sql(
-    container,
+  await db.sql(
     `CREATE ROLE ${RUNTIME_ROLE} LOGIN PASSWORD '${RUNTIME_PASSWORD}' NOSUPERUSER NOBYPASSRLS;
-     REVOKE CREATE ON DATABASE ${container.getDatabase()} FROM ${RUNTIME_ROLE};
+     REVOKE CREATE ON DATABASE ${db.name} FROM ${RUNTIME_ROLE};
      REVOKE CREATE ON SCHEMA public FROM ${RUNTIME_ROLE};
-     GRANT CONNECT ON DATABASE ${container.getDatabase()} TO ${RUNTIME_ROLE};`,
+     GRANT CONNECT ON DATABASE ${db.name} TO ${RUNTIME_ROLE};`,
   )
 
   const url = new URL(ownerUri)
@@ -65,7 +71,10 @@ afterEach(async () => {
 })
 
 afterAll(async () => {
-  await container?.stop()
+  // El rol es del SERVIDOR: si no se borra aqui, sobrevive a la base y va
+  // llenando un servidor externo de roles muertos.
+  await db.sql(`DROP ROLE IF EXISTS ${RUNTIME_ROLE}`).catch(() => undefined)
+  await db.drop()
 })
 
 describe('installQueueSchema', () => {
@@ -75,7 +84,7 @@ describe('installQueueSchema', () => {
     // app_runtime, y eso hay que verlo en rojo.
     await expect(newQueue(runtimeUri).start()).rejects.toThrow(/permission denied/i)
 
-    expect(await sqlValue(container, `SELECT to_regnamespace('queue') IS NULL`)).toBe('t')
+    expect(await db.sqlValue(`SELECT to_regnamespace('queue') IS NULL`)).toBe(true)
   }, 60_000)
 
   it('tras instalar como dueno, la aplicacion arranca y procesa un job con su tenant', async () => {
@@ -110,20 +119,19 @@ describe('installQueueSchema', () => {
   it('concede CREATE solo en el esquema de la cola, nunca en la base ni en public', async () => {
     await installQueueSchema({ connectionString: ownerUri, runtimeRole: RUNTIME_ROLE })
 
-    const [enQueue, enPublic, enBase, bypass] = await sql(
-      container,
+    const [enQueue, enPublic, enBase, bypass] = await db.sqlColumn(
       `SELECT has_schema_privilege('${RUNTIME_ROLE}','queue','CREATE');
        SELECT has_schema_privilege('${RUNTIME_ROLE}','public','CREATE');
-       SELECT has_database_privilege('${RUNTIME_ROLE}','${container.getDatabase()}','CREATE');
+       SELECT has_database_privilege('${RUNTIME_ROLE}','${db.name}','CREATE');
        SELECT rolbypassrls FROM pg_roles WHERE rolname='${RUNTIME_ROLE}';`,
     )
 
     // pg-boss crea una particion por cola en runtime, asi que CREATE en `queue`
     // es necesario. Lo demas seria abrir la mano de mas.
-    expect(enQueue).toBe('t')
-    expect(enPublic).toBe('f')
-    expect(enBase).toBe('f')
-    expect(bypass).toBe('f')
+    expect(enQueue).toBe(true)
+    expect(enPublic).toBe(false)
+    expect(enBase).toBe(false)
+    expect(bypass).toBe(false)
   }, 90_000)
 
   it('es idempotente: correrlo dos veces no falla', async () => {
