@@ -90,18 +90,34 @@ const GLOBAL_VERDICT_LABEL = { apto: 'APTO', no_apto: 'NO APTO' } as const
 // El plan: la misma estructura de contenido para los dos formatos
 // ---------------------------------------------------------------------------
 
-interface CriterionBlock {
+/**
+ * Un PASS resumido: SOLO su id. Ni ordinal ni veredicto, porque ninguna de las
+ * dos cosas se llega a renderizar nunca en una linea agrupada (`passLines`
+ * escribe la etiqueta PASS y los ids, y nada mas). Llevarlos aqui era un campo
+ * muerto que ademas obligaba al bloque detallado a declarar `detail` como
+ * opcional, y de ahi salia un `?.`/`?? ''` en cada linea del renderizado para
+ * cubrir un caso que no puede darse.
+ */
+interface SummarizedBlock {
+  readonly kind: 'summarized'
+  readonly criterionId: string
+}
+
+/** Un criterio con todo su detalle. `detail` NO es opcional aqui: por eso existe la union. */
+interface DetailedBlock {
+  readonly kind: 'detailed'
   readonly ordinal: number
   readonly verdict: CriterionVerdictValue
   readonly criterionId: string
-  /** `undefined` cuando el bloque esta resumido: solo se muestran veredicto e id. */
-  readonly detail?: {
+  readonly detail: {
     readonly criterionQuote: string
     readonly evidenceSource: CriterionVerdict['evidenceSource']
     readonly evidenceQuote: string
     readonly reasoning: string
   }
 }
+
+type CriterionBlock = SummarizedBlock | DetailedBlock
 
 type CompactionLevel = 0 | 1 | 2
 
@@ -123,9 +139,10 @@ function buildPlan(report: ConformanceReport, level: CompactionLevel): ReportPla
     const summarize = level > 0 && verdict.verdict === 'PASS'
     if (summarize) {
       summarizedPassCount += 1
-      return { ordinal: index + 1, verdict: verdict.verdict, criterionId: verdict.criterionId }
+      return { kind: 'summarized', criterionId: verdict.criterionId }
     }
     return {
+      kind: 'detailed',
       ordinal: index + 1,
       verdict: verdict.verdict,
       criterionId: verdict.criterionId,
@@ -191,14 +208,21 @@ function countsLine(counts: VerdictCounts): string {
   return `PASS: ${String(counts.PASS)} · FAIL: ${String(counts.FAIL)} · SIN_EVIDENCIA: ${String(counts.SIN_EVIDENCIA)} · Total: ${String(total)}`
 }
 
+/**
+ * La nota va en TEXTO LLANO. El subrayado de Markdown lo pone `renderMarkdown`.
+ * Antes se devolvia ya con los `_` y el renderizado de texto plano se los
+ * quitaba con `.replace(/^_|_$/g, '')`: dos formatos peleandose por la misma
+ * cadena, y una expresion regular manteniendo una decoracion que el otro
+ * formato nunca quiso.
+ */
 function summaryNote(plan: ReportPlan): string | undefined {
   if (plan.summarizedPassCount === 0) return undefined
   const how =
     plan.level < 2 ? 'se resumieron a una linea' : 'se resumieron y agrupados varios por linea'
   return (
-    `_${String(plan.summarizedPassCount)} criterio(s) PASS ${how} para que el informe quepa en ` +
+    `${String(plan.summarizedPassCount)} criterio(s) PASS ${how} para que el informe quepa en ` +
     'pantalla. Estan TODOS por su id; lo que se quita es el razonamiento y las citas de los ' +
-    'PASS. Ningun FAIL ni SIN_EVIDENCIA se ha recortado._'
+    'PASS. Ningun FAIL ni SIN_EVIDENCIA se ha recortado.'
   )
 }
 
@@ -210,17 +234,23 @@ function summaryNote(plan: ReportPlan): string | undefined {
 function renderBlocks(
   plan: ReportPlan,
   bullet: string,
-  renderDetail: (block: CriterionBlock) => string[],
+  renderDetail: (block: DetailedBlock) => string[],
 ): string[] {
   const lines: string[] = []
   let run: string[] = []
+  // Sin guarda de racha vacia: `passLines([])` devuelve [] en los dos niveles,
+  // asi que vaciar una racha que no existe ya no hace nada. La guarda era una
+  // rama que ningun test podia distinguir de su ausencia.
   const flush = (): void => {
-    if (run.length === 0) return
     lines.push(...passLines(run, plan.level, bullet))
     run = []
   }
   for (const block of plan.blocks) {
-    if (block.detail === undefined) {
+    // Se pregunta por 'summarized', no por 'detailed': el otro literal del
+    // discriminante solo tiene que ser "distinto de este". Por eso el mutante
+    // que lo vacia sobrevive al mutation testing y es EQUIVALENTE, no un
+    // hueco de test: no hay entrada que distinga las dos versiones.
+    if (block.kind === 'summarized') {
       run.push(block.criterionId)
       continue
     }
@@ -250,15 +280,15 @@ function renderMarkdown(plan: ReportPlan): string {
   const note = summaryNote(plan)
   if (note !== undefined) {
     lines.push('')
-    lines.push(note)
+    lines.push(`_${note}_`)
   }
   lines.push('')
   lines.push(
     ...renderBlocks(plan, '-', (block) => [
       `### ${String(block.ordinal)}. ${VERDICT_LABEL[block.verdict]} — ${block.criterionId}`,
-      `**Criterio:** "${block.detail?.criterionQuote ?? ''}"`,
-      `**Evidencia** (${String(block.detail?.evidenceSource)}): "${block.detail?.evidenceQuote ?? ''}"`,
-      `**Razonamiento:** ${block.detail?.reasoning ?? ''}`,
+      `**Criterio:** "${block.detail.criterionQuote}"`,
+      `**Evidencia** (${block.detail.evidenceSource}): "${block.detail.evidenceQuote}"`,
+      `**Razonamiento:** ${block.detail.reasoning}`,
     ]),
   )
   return lines.join('\n').trimEnd()
@@ -281,15 +311,15 @@ function renderPlainText(plan: ReportPlan): string {
   const note = summaryNote(plan)
   if (note !== undefined) {
     lines.push('')
-    lines.push(note.replace(/^_|_$/g, ''))
+    lines.push(note)
   }
   lines.push('')
   lines.push(
     ...renderBlocks(plan, '-', (block) => [
       `${String(block.ordinal)}. ${VERDICT_LABEL[block.verdict]} — ${block.criterionId}`,
-      `   Criterio: "${block.detail?.criterionQuote ?? ''}"`,
-      `   Evidencia (${String(block.detail?.evidenceSource)}): "${block.detail?.evidenceQuote ?? ''}"`,
-      `   Razonamiento: ${block.detail?.reasoning ?? ''}`,
+      `   Criterio: "${block.detail.criterionQuote}"`,
+      `   Evidencia (${block.detail.evidenceSource}): "${block.detail.evidenceQuote}"`,
+      `   Razonamiento: ${block.detail.reasoning}`,
     ]),
   )
   return lines.join('\n').trimEnd()
@@ -324,26 +354,34 @@ function renderWithBudget(
 ): RenderedConformanceReport {
   assertReportIsUsable(report)
 
-  // Las tres pasadas, de menos a mas compresion. Se devuelve LA PRIMERA que
-  // quepa: nunca se comprime mas de lo necesario.
-  let last: RenderedConformanceReport | undefined
-  for (const level of [0, 1, 2] as const) {
+  const renderAtLevel = (level: CompactionLevel): RenderedConformanceReport => {
     const plan = buildPlan(report, level)
     const text = format(plan)
-    const rendered: RenderedConformanceReport = {
+    return {
       text,
       ...measure(text),
       fitsOnScreen: fitsBudget(text, budget),
       summarizedPassCount: plan.summarizedPassCount,
       compactionLevel: level,
     }
+  }
+
+  // Las tres pasadas, de menos a mas compresion. Se devuelve LA PRIMERA que
+  // quepa: nunca se comprime mas de lo necesario.
+  //
+  // La pasada 0 se hace FUERA del bucle a proposito. Con las tres dentro hacia
+  // falta un acumulador `RenderedConformanceReport | undefined` y, detras del
+  // bucle, un `if (last === undefined) throw` que no puede ejecutarse nunca:
+  // codigo inalcanzable que ningun test puede cubrir y que por tanto tampoco
+  // puede protegerse. Asi el tipo ya no admite el estado imposible.
+  let rendered = renderAtLevel(0)
+  for (const level of [1, 2] as const) {
     if (rendered.fitsOnScreen) return rendered
-    last = rendered
+    rendered = renderAtLevel(level)
   }
   // Ni con la maxima compresion cabe: se devuelve ENTERO y se dice que no cabe.
   // Recortar un FAIL para caber seria la unica forma de mentir aqui.
-  if (last === undefined) throw new Error('inalcanzable: el bucle de pasadas siempre asigna `last`')
-  return last
+  return rendered
 }
 
 /** Comentario de PR: se publica con `@coord/github` (ver `report-publisher.ts`). */
