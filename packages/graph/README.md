@@ -272,6 +272,47 @@ forma `<raíz>/<owner>/<repo>`). Clonar y actualizar checkouts no es de esta
 tarea: **sin esa variable el enganche no se registra** y se dice en el log. Es
 una decisión explícita y visible, no un fallo silencioso.
 
+### 4.3 Indexar a mano: `graph:index`
+
+El webhook no es la única vía. Para probar el grafo —o el servidor MCP— sin
+registrar la GitHub App ni montar un túnel:
+
+```bash
+pnpm --filter @coord/graph graph:index -- \
+  --repo PACONSULTING-gh/coding-agents --path "$PWD"
+```
+
+```
+Indexado PACONSULTING-gh/coding-agents desde /home/jviserass/…/CodingAgents
+  repo_id      cab7ee9f-32db-5bbc-8e3a-d071e4481aa1
+  commit       b049b960c6ba769c5068a92344e33da200247ff3
+  ficheros     136 parseados · 55 sin cambios · 0 borrados
+  grafo        359 nodos · 937 aristas
+  build        sin Nx ni Turborepo en este repo
+  co-change    0 aristas
+  sin resolver 2 imports (se descartan: el grafo no inventa aristas)
+  tiempo       420 ms
+```
+
+**El tenant no tiene valor por defecto**, ni lo tendrá: la RLS lo exige, y un
+comando que eligiera uno sería justo el atajo que rompe el aislamiento sin que
+nadie se entere. Sale de `--tenant`, de `GRAPH_TENANT_ID`, o de
+`GRAPH_MCP_TENANT_ID` — este último a propósito, para que **lo que escribe el
+comando sea lo que consulta el agente**, sin ids que copiar a mano.
+
+El `repo_id` se deriva del tenant y del `owner/repo`, igual que en el worker y en
+el servidor MCP (§1). Por eso `--repo` es la identidad lógica y `--path` solo dice
+dónde está el checkout: puedes indexar un directorio cualquiera y seguirá
+escribiendo en el grafo del repositorio que le digas.
+
+La secuencia (estáticas → build → co-change) vive en `indexRepository`, y la usan
+**el worker y el comando**. Si algún día se añade una cuarta señal, entra por un
+solo sitio: duplicarla significaría que la vía menos usada se queda atrás sin que
+nadie lo note.
+
+`--json` para scripts. Un directorio que no es un repositorio git falla **antes**
+de tocar la base, diciendo por qué.
+
 ---
 
 ## 5. Grafo nativo de build y overlay de co-cambio (T03)

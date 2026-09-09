@@ -11,3 +11,5 @@ export {
 } from './checkpoint.js'
 export { listTrackedFiles, resolveHeadCommit } from './git.js'
 export { repoIdForRepository } from './repo-id.js'
+export { indexRepository } from './index-repository.js'
+export type { IndexRepositoryInput, IndexRepositoryResult } from './index-repository.js'

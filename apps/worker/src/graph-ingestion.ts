@@ -2,13 +2,7 @@ import { access } from 'node:fs/promises'
 
 import { requireTenant, type JobEnvelope, type QueuePort } from '@coord/core'
 import type { GithubWebhookJob } from '@coord/github'
-import {
-  ingestBuildGraph,
-  ingestCochange,
-  ingestRepository,
-  repoIdForRepository,
-  resolveCheckoutPath,
-} from '@coord/graph'
+import { indexRepository, resolveCheckoutPath } from '@coord/graph'
 import type { Logger } from 'pino'
 
 import type { DomainEventHandler } from './github-events.js'
@@ -137,16 +131,25 @@ export function createGraphIngestJobHandler(options: {
     await access(repoPath)
 
     const { tenantId } = requireTenant()
-    const repoId = repoIdForRepository(tenantId, job.repository)
 
-    const result = await ingestRepository({ repoId, repoPath, commitSha: job.commitSha })
-    const build = await ingestBuildGraph({ repoId, repoPath })
-    const cochange = await ingestCochange({ repoId, repoPath })
+    // La secuencia vive en @coord/graph y la comparte con el comando manual
+    // (`graph:index`). Si se anade una cuarta senal, entra por un solo sitio.
+    const {
+      repoId,
+      static: result,
+      build,
+      cochange,
+    } = await indexRepository({
+      repository: job.repository,
+      repoPath,
+      commitSha: job.commitSha,
+    })
 
     options.logger.info(
       {
         jobId: envelope.id,
         tenantId,
+        repoId,
         repository: job.repository,
         ...result,
         build,

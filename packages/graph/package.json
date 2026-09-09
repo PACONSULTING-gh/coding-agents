@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p test/tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "graph:index": "tsx src/cli/index-repo.ts"
   },
   "dependencies": {
     "@coord/core": "workspace:*",

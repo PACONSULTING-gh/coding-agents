@@ -171,8 +171,25 @@ Un servidor MCP no tiene sesión de donde sacar el tenant, así que viene de
 `GRAPH_MCP_TENANT_ID` y **el servidor se niega a arrancar si falta**. Nunca
 responder "todo" por no tener contexto.
 
+### Indexar a mano, y la prueba de que el MCP responde
+
+`pnpm --filter @coord/graph graph:index -- --repo <owner/nombre> --path <dir>`
+llena el grafo sin webhook, sin GitHub App y sin túnel. La secuencia vive en
+`indexRepository` y la comparten el comando y el worker: si algún día se añade una
+cuarta señal, entra por un solo sitio.
+
+Comprobado de punta a punta contra este repo: indexado en **420 ms** (136 ficheros
+parseados, 55 sin cambios, 359 nodos, 937 aristas), y un cliente MCP real
+conectado por stdio lista las cinco herramientas y devuelve `blast_radius` con
+afectados cruzando paquetes, cada uno con su distancia y su señal.
+
+El tenant **no tiene valor por defecto**, ni lo tendrá: la RLS lo exige, y un
+comando que eligiera uno sería el atajo que rompe el aislamiento sin que nadie se
+entere.
+
 ### Lo que falta para cerrar la fase
 
-**No existe comando para indexar un repo a mano** — solo llega por webhook de
-`push`. Así que el criterio _"herramientas MCP conectadas a un agente real"_ sigue
-sin cumplirse. Es la pieza más pequeña que desbloquea probar el MCP de verdad.
+De los cuatro criterios de la Definition of Done del epic quedan **dos**, y ambos
+dependen del proyecto piloto (#8): _"dado un PR en el repo piloto, el sistema dice
+qué se ve afectado y quién lo tocó"_, y el enganche a un repositorio real del
+equipo.
