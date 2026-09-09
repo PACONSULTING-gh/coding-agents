@@ -33,7 +33,7 @@ Epic 01 ──┬── Epic 02 ──┬── Epic 03
 ## Decisiones pendientes que bloquean tareas concretas
 
 Ninguna bloquea el Epic 01. Se pueden tomar sobre la marcha, pero cada una tiene
-su fecha límite real:
+su fecha límite real. **La 4 ya está decidida** (ADR 0008).
 
 ### 1. Proyecto piloto
 **Bloquea:** Epic 01 T07
@@ -55,13 +55,20 @@ atascados). Si no se mide antes, no habrá con qué comparar después.
 mensajería. Es decisión de producto, no técnica.
 **Cuándo:** antes de empezar Epic 04 T05.
 
-### 4. Flujo de fallo de verificación
-**Bloquea:** Epic 05 T06
-**Qué hay que decidir:** cuando el gate falla o el veredicto es ambiguo — quién
-recibe el aviso, si se devuelve al mismo agente o se reasigna, cuántos reintentos
-antes de escalar, y cómo se re-verifica. Es la laguna que arrastramos desde el
-principio y la única que sigue sin diseñar del todo.
-**Cuándo:** antes de empezar Epic 05 T06. Merece su propia sesión de diseño.
+### 4. Flujo de fallo de verificación — ~~PENDIENTE~~ **DECIDIDA (9 sep 2026)**
+**Bloqueaba:** Epic 05 T06
+**Decisión:** `docs/adr/0008-flujo-de-fallo-y-ambiguedad.md`.
+
+Resumen: no hay *un* flujo de fallo, hay **cuatro modos con tres destinos**. Un
+fallo del gate o un FAIL del Verifier vuelven al mismo agente; un SIN_EVIDENCIA
+repetido **sobre el mismo criterio** vuelve a la fase de criterios; y un fallo
+que impide al Verifier emitir veredicto escala a un humano **sin gastar
+intento**. Dos intentos en total. El responsable sale de una cadena (holder del
+claim → assignee del issue → nadie, y el "nadie" se dice). El aviso sale por un
+puerto, con un adaptador que comenta en el issue.
+
+Que esta tarea estuviera mal planteada —dando por hecho que era un solo flujo—
+es la razón de que llevara meses sin diseñarse.
 
 ### 5. Presentación del informe de conformidad
 **Bloquea:** Epic 05 T05 (parcialmente — se puede empezar con un formato
