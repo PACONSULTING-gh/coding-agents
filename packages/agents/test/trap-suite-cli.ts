@@ -26,14 +26,56 @@
  * `src/verification/trap-suite.ts`, que es lo que otro banco de casos podria
  * reutilizar. Aqui solo queda el arranque.
  */
+import { mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+import type { LlmPort } from '@coord/core'
+
 import { AnthropicLlm } from '../src/anthropic.js'
+import { ClaudeCliLlm } from '../src/claude-cli.js'
 import { formatTrapSuiteReport, runTrapSuite } from '../src/verification/trap-suite.js'
 
 import { TRAP_CASES } from './fixtures/trampas/index.js'
 
 const API_KEY_ENV = 'ANTHROPIC_API_KEY'
 
-async function main(): Promise<void> {
+/**
+ * Por donde se habla con el modelo.
+ *
+ *   - `api` (por defecto) — la ruta de PRODUCCION que fija el PRD §5. Cuesta
+ *     dinero por token.
+ *   - `cli` — el CLI de Claude Code sobre una suscripcion ya pagada. Es una
+ *     ruta de MEDICION, no de produccion: su aislamiento es una lista negra de
+ *     herramientas y no una propiedad del transporte, y no hay salida
+ *     estructurada garantizada. Lo que salga por aqui hay que CITARLO ASI, no
+ *     como si fuera la cifra de la ruta de API.
+ */
+type Via = 'api' | 'cli'
+
+function parseVia(argv: readonly string[]): Via {
+  const index = argv.indexOf('--via')
+  if (index === -1) return 'api'
+  const value = argv[index + 1]
+  if (value !== 'api' && value !== 'cli') {
+    process.stderr.write(`--via acepta 'api' o 'cli', y se le paso ${JSON.stringify(value)}.\n`)
+    process.exit(2)
+  }
+  return value
+}
+
+async function buildLlm(via: Via): Promise<LlmPort> {
+  if (via === 'cli') {
+    // Directorio vacio: si alguna herramienta se escapara de la lista negra, no
+    // hay nada que leer. Ver la cabecera de `claude-cli.ts`.
+    const cwd = await mkdtemp(join(tmpdir(), 'trap-suite-'))
+    process.stderr.write(
+      `Midiendo ${String(TRAP_CASES.length)} casos con el CLI de Claude Code (suscripcion). ` +
+        'AVISO: no es la ruta de produccion; la cifra hay que citarla como medida por CLI.\n',
+    )
+    return new ClaudeCliLlm({ cwd })
+  }
+
   const apiKey = process.env[API_KEY_ENV]
   if (apiKey === undefined || apiKey.trim() === '') {
     // Falla ruidosamente y sin alternativa. No hay modo "sin clave" a
@@ -42,21 +84,49 @@ async function main(): Promise<void> {
     // que es exactamente lo que este epic existe para evitar.
     process.stderr.write(
       `Falta ${API_KEY_ENV}. Este comando mide contra el modelo de verdad y no tiene modo ` +
-        'degradado: sin clave no hay medicion, y una tasa inventada es peor que ninguna.\n',
+        'degradado: sin clave no hay medicion, y una tasa inventada es peor que ninguna. ' +
+        'Alternativa sobre una suscripcion ya pagada: --via cli.\n',
     )
     process.exit(2)
   }
-
-  const llm = new AnthropicLlm({ apiKey })
 
   process.stderr.write(
     `Midiendo ${String(TRAP_CASES.length)} casos contra la API de Anthropic. ` +
       'Esto gasta tokens de verdad.\n',
   )
+  return new AnthropicLlm({ apiKey })
+}
+
+/**
+ * `--model` para poder medir con un modelo distinto al de produccion.
+ *
+ * No es un capricho: medido el 9 de septiembre de 2026, `claude-opus-5` sobre
+ * el CLI RECHAZA la peticion del Verifier con la categoria
+ * `reasoning_extraction` (2 de 2 intentos), mientras que `claude-sonnet-5`
+ * responde con normalidad. Sin esta opcion, el banco no se puede correr por la
+ * ruta de suscripcion en absoluto.
+ *
+ * Lo que salga con un modelo que NO es el de produccion hay que citarlo
+ * nombrando el modelo. Una tasa de falso aprobado no es transferible entre
+ * modelos: medir Sonnet y presentarlo como la cifra de Opus seria justo la
+ * clase de numero inventado que este epic existe para evitar.
+ */
+function parseModel(argv: readonly string[]): string | undefined {
+  const index = argv.indexOf('--model')
+  return index === -1 ? undefined : argv[index + 1]
+}
+
+async function main(): Promise<void> {
+  const argv = process.argv.slice(2)
+  const llm = await buildLlm(parseVia(argv))
+  const model = parseModel(argv)
+  if (model !== undefined) {
+    process.stderr.write(`Modelo forzado: ${model}. Cita la cifra nombrando este modelo.\n`)
+  }
 
   // Sin try/catch: si una llamada falla, el error sube con su tipo y el proceso
   // muere. Una medicion a medias no se presenta como una medicion.
-  const report = await runTrapSuite(llm, TRAP_CASES)
+  const report = await runTrapSuite(llm, TRAP_CASES, model === undefined ? {} : { model })
 
   process.stdout.write(`${formatTrapSuiteReport(report)}\n`)
 
