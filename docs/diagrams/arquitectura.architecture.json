@@ -89,7 +89,7 @@
       "type": "backend",
       "label": "servidor MCP",
       "sublabel": "5 herramientas",
-      "pos": [880, 530],
+      "pos": [880, 450],
       "size": [170, 64],
       "sources": [
         {
@@ -103,7 +103,7 @@
       "type": "external",
       "label": "Agentes de código",
       "sublabel": "Claude Code · Codex",
-      "pos": [1150, 530],
+      "pos": [1150, 450],
       "size": [170, 64]
     },
     {

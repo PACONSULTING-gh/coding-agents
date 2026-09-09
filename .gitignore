@@ -17,3 +17,8 @@ reports
 # Diagramas renderizados: artefacto, como dist/. La fuente es el .json.
 # Se regeneran con `pnpm diagrams`.
 docs/diagrams/*.html
+# Sidecars de `archify visual-check`: capturas y recibo de navegador.
+docs/diagrams/*.visual-check.*
+
+# Artefactos de sesiones de Playwright (capturas, snapshots, logs de consola).
+.playwright-mcp/
