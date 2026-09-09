@@ -103,7 +103,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeDatabase()
-  await database?.container.stop()
+  await database?.stop()
 })
 
 describe('1. persistencia del evento en audit_log', () => {

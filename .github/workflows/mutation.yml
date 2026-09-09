@@ -29,6 +29,34 @@ jobs:
   mutation:
     name: Stryker (modulos criticos)
     runs-on: ubuntu-latest
+    # El Postgres de los tests de integracion, provisionado FUERA del proceso
+    # de test (ADR 0007). Sin esto el job no arranca: los tests se NIEGAN a
+    # correr bajo Stryker sin `TEST_DATABASE_URL`, porque levantar un contenedor
+    # por mutante hace que la puntuacion salga de los timeouts en vez de los
+    # tests (issue #26: `client.ts` marcaba 90,34 con CERO mutantes muertos).
+    #
+    # `POSTGRES_HOST_AUTH_METHOD: trust` y no una contrasena: este servicio vive
+    # y muere con el job, solo es alcanzable desde dentro del runner, y asi no
+    # hace falta inventar un secreto de repositorio que, si alguien olvida
+    # crear, rompe el workflow con un error que no se entiende. Lo que los tests
+    # ejercitan —separacion de roles, propiedad de las tablas, RLS forzada—
+    # sigue siendo identico: lo unico que cambia es como se autentica.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: coord
+          POSTGRES_DB: coord
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U coord -d coord"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://coord@localhost:5432/coord
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

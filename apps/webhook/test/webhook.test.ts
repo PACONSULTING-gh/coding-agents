@@ -165,7 +165,7 @@ afterAll(async () => {
   await server?.close()
   await queue?.stop()
   await closeDatabase()
-  await database?.container.stop()
+  await database?.stop()
 })
 
 describe('1. verificacion de firma', () => {

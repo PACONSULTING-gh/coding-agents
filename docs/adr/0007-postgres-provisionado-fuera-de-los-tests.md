@@ -1,6 +1,6 @@
 # ADR 0007 — El Postgres de los tests de integración se provisiona fuera del proceso de test
 
-**Estado:** Propuesta (con la parte de `packages/queue` ya implementada y medida)
+**Estado:** Propuesta (implementada y medida en `packages/queue` y `packages/db`; falta `packages/graph`)
 
 **Contexto de origen:** issue #26, abierto desde el epic 05 / T03 (issue #23) al
 descubrir que el gate de mutation testing estaba en verde escondiendo mutantes
@@ -128,7 +128,7 @@ onboarding. Era un precio que no hacía falta pagar.
 test muere sin borrar la suya. Un barrido de las que empiecen por el prefijo
 convenido, al arrancar la suite, es más fiable que confiar en el `afterAll`.
 
-## Comprobado sobre `packages/queue`
+## Comprobado sobre `packages/queue` y `packages/db`
 
 Antes de escribir esta sección el ADR era una propuesta razonada. Ahora está
 medido: `packages/queue` ya sigue esta política (`packages/db/test/support/postgres-server.ts`
@@ -150,6 +150,33 @@ ven.
 Y la suite normal no sufre: `pnpm test` del paquete pasa de 26 s a **24 s** con
 contenedor (uno por proceso en vez de uno por fichero) y a **16,5 s** contra un
 servidor externo. Los 27 tests siguen en verde.
+
+### `packages/db`
+
+|                           | Contenedor por mutante                 | Servidor externo               |
+| ------------------------- | -------------------------------------- | ------------------------------ |
+| Puntuación de `client.ts` | **90,34 %** con **0 mutantes muertos** | **68,97 %** con **94 muertos** |
+| Timeouts                  | 131                                    | 6                              |
+| Supervivientes            | 0                                      | 31                             |
+| Duración                  | ~25 min                                | **4 min 34 s**                 |
+
+`client.ts` **vuelve a la lista `mutate`**: 68,97 supera el `break=60`. El gate
+completo queda en **86,58 %** en 6 min 52 s, y `envelope.ts` pasa a **0
+timeouts** —sin contenedores no hay caducidades espurias que inflen a nadie—.
+
+Dos cosas aparecieron al migrar `packages/db`, y ninguna estaba prevista en la
+primera versión de este ADR:
+
+1. **`tuple concurrently updated`.** Los roles son objetos de cluster: varios
+   ficheros de test arrancando a la vez tocan la misma fila de `pg_authid`.
+   Derivar la contraseña quita la carrera semántica —todos escriben el mismo
+   valor— pero no la física. Medido: 3 de 6 ficheros caían. Se resuelve con un
+   advisory lock de sesión sobre la base por defecto del servidor, tomado
+   alrededor del bootstrap de roles. No contradice el ADR 0004: allí el problema
+   era sostener un lock durante horas detrás de PgBouncer en modo transacción;
+   esto es una sección crítica de milisegundos sobre una conexión directa.
+2. **El ámbito de los advisory locks es la BASE DE DATOS**, no el cluster. Tomar
+   el cerrojo en la base de test recién creada no habría excluido a nadie.
 
 **Lo que esto deja pendiente:** 42,86 % está por debajo del `break=60`, así que
 `pg-boss-queue.ts` **no vuelve todavía** a la lista `mutate`. Dejarlo entrar

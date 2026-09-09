@@ -56,7 +56,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeDatabase()
-  await database?.container.stop()
+  await database?.stop()
 })
 
 const MANIPULADO: GeneratedTestsVerification = {

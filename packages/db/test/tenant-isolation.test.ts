@@ -1,13 +1,13 @@
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 
 import { runWithTenant } from '@coord/core'
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
 import { Client } from 'pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { appendAuditEntry, readAuditLog } from '../src/audit.js'
-import { migrate } from '../src/migrate.js'
 import { DOMAIN_TABLES } from '../src/schema.js'
+
+import { startDatabase, type StartedDatabase } from './support/database.js'
 
 /**
  * Tests de aislamiento entre tenants contra un PostgreSQL DE VERDAD levantado
@@ -28,8 +28,6 @@ import { DOMAIN_TABLES } from '../src/schema.js'
  *   4. Las consultas de los tests van como `app_runtime`.
  */
 
-const POSTGRES_IMAGE = 'postgres:16-alpine'
-
 /** Tablas cuyo discriminante es `tenant_id` (todas menos la raiz `tenants`). */
 const TENANT_SCOPED_TABLES = DOMAIN_TABLES.filter((table) => table !== 'tenants')
 
@@ -46,28 +44,12 @@ interface TenantFixture {
   installationId: number
 }
 
-let container: StartedPostgreSqlContainer
+let db: StartedDatabase
 let runtime: Client
 let migrator: Client
 let superuser: Client
 let tenantA: TenantFixture
 let tenantB: TenantFixture
-
-/** Contrasena aleatoria por ejecucion. Nunca hay credenciales en el repositorio. */
-function generatePassword(): string {
-  return randomBytes(24).toString('hex')
-}
-
-function connectionUrl(
-  started: StartedPostgreSqlContainer,
-  user: string,
-  password: string,
-): string {
-  if (!/^[0-9a-f]+$/.test(password)) {
-    throw new Error('La contrasena generada debe ser hexadecimal para poder interpolarse en SQL.')
-  }
-  return `postgres://${user}:${password}@${started.getHost()}:${String(started.getPort())}/${started.getDatabase()}`
-}
 
 /**
  * Ejecuta `fn` dentro de una transaccion con `app.tenant_id` fijado. `set_config`
@@ -240,35 +222,19 @@ async function seedTenant(client: Client, slug: string): Promise<TenantFixture> 
 }
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer(POSTGRES_IMAGE).start()
+  // El montaje —contenedor o servidor compartido, bootstrap en tres pasos y
+  // separacion real de roles— vive en `support/database.ts` y lo comparten
+  // todos los tests de integracion (ADR 0007). Antes estaba duplicado aqui, con
+  // su propio contenedor y su propia generacion de contrasenas.
+  db = await startDatabase()
 
-  const migratorPassword = generatePassword()
-  const runtimePassword = generatePassword()
-
-  // Paso 1: bootstrap con el rol privilegiado, solo la migracion 0001.
-  const superUrl = container.getConnectionUri()
-  const bootstrapped = await migrate({ databaseUrl: superUrl, direction: 'up', count: 1 })
-  expect(bootstrapped).toEqual(['0001_bootstrap_roles_and_extensions'])
-
-  // Paso 2: contrasenas fuera de banda. ALTER ROLE no admite parametros, por eso
-  // connectionUrl() exige que la contrasena sea hexadecimal antes de interpolar.
-  superuser = new Client({ connectionString: superUrl })
+  superuser = new Client({ connectionString: db.superUrl })
   await superuser.connect()
-  await superuser.query(`ALTER ROLE app_migrator WITH PASSWORD '${migratorPassword}'`)
-  await superuser.query(`ALTER ROLE app_runtime WITH PASSWORD '${runtimePassword}'`)
 
-  // Paso 3: el resto de migraciones las aplica app_migrator, que queda como
-  // dueno de las tablas.
-  const migratorUrl = connectionUrl(container, 'app_migrator', migratorPassword)
-  const applied = await migrate({ databaseUrl: migratorUrl, direction: 'up' })
-  expect(applied.length).toBeGreaterThan(0)
-
-  migrator = new Client({ connectionString: migratorUrl })
+  migrator = new Client({ connectionString: db.migratorUrl })
   await migrator.connect()
 
-  runtime = new Client({
-    connectionString: connectionUrl(container, 'app_runtime', runtimePassword),
-  })
+  runtime = new Client({ connectionString: db.runtimeUrl })
   await runtime.connect()
 
   tenantA = await seedTenant(runtime, 'alfa')
@@ -279,7 +245,7 @@ afterAll(async () => {
   await runtime?.end()
   await migrator?.end()
   await superuser?.end()
-  await container?.stop()
+  await db?.stop()
 })
 
 describe('1. con el tenant A fijado solo se ven filas de A', () => {

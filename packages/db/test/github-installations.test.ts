@@ -86,7 +86,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await runtime?.end()
   await closeDatabase()
-  await database?.container.stop()
+  await database?.stop()
 })
 
 describe('1. aislamiento normal de github_installations', () => {
