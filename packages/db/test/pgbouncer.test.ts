@@ -152,7 +152,7 @@ afterAll(async () => {
   await closeDatabase()
   await admin?.end()
   await pgbouncer?.stop()
-  await db?.container.stop()
+  await db?.stop()
   await network?.stop()
 })
 

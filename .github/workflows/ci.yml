@@ -58,8 +58,31 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     # ubuntu-latest trae Docker preinstalado, necesario para los tests de
-    # integracion con testcontainers (Postgres real, CLAUDE.md: "nada de
-    # mocks de lo que no controlas").
+    # integracion (Postgres real, CLAUDE.md: "nada de mocks de lo que no
+    # controlas"). packages/graph y el test de PgBouncer siguen levantando su
+    # propio contenedor con testcontainers.
+    #
+    # El resto usa el servidor de abajo por `TEST_DATABASE_URL` (ADR 0007). Se
+    # cablea aqui, y no solo en el workflow de mutacion, POR UNA RAZON: el
+    # camino externo es el que casi nadie corre en local, y un camino que solo
+    # se ejercita el dia que alguien mide mutacion se pudre sin que nadie se
+    # entere. Asi se rompe en rojo en cada PR, que es cuando sale barato.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: coord
+          POSTGRES_DB: coord
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U coord -d coord"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://coord@localhost:5432/coord
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

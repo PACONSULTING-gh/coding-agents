@@ -47,7 +47,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeDatabase()
-  await db?.container.stop()
+  await db?.stop()
 })
 
 /** Un tenant nuevo, dado de alta por la misma via que usa el producto. */
