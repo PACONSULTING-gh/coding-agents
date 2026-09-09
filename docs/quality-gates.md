@@ -49,18 +49,19 @@ pero son texto en el prompt. Necesarias, no suficientes.
 
 Hooks de pre-commit + CI. Aquí es donde las reglas se vuelven reales.
 
-| Check                             | Herramienta                  | Cuándo                     | Bloquea      |
-| --------------------------------- | ---------------------------- | -------------------------- | ------------ |
-| Formato y lint                    | linter del stack             | pre-commit + CI            | sí           |
-| Type-check                        | `tsc`                        | pre-commit + CI            | sí           |
-| Secretos                          | Gitleaks / TruffleHog        | pre-commit                 | sí           |
-| Tests                             | runner del stack             | CI                         | sí           |
-| SCA de dependencias               | Dependabot                   | continuo                   | crítico/alto |
-| SAST                              | Semgrep o CodeQL             | CI                         | crítico/alto |
-| IaC                               | Trivy / Checkov              | CI (cuando haya Terraform) | crítico/alto |
-| Fitness functions de arquitectura | dependency-cruiser           | CI                         | sí           |
-| Mutation testing                  | según stack                  | CI, módulos críticos       | bajo umbral  |
-| Calidad / deuda técnica           | SonarQube Server self-hosted | CI                         | quality gate |
+| Check                              | Herramienta                                | Cuándo                              | Bloquea                                    |
+| ---------------------------------- | ------------------------------------------ | ----------------------------------- | ------------------------------------------ |
+| Formato y lint                     | linter del stack                           | pre-commit + CI                     | sí                                         |
+| Type-check                         | `tsc`                                      | pre-commit + CI                     | sí                                         |
+| Secretos                           | Gitleaks / TruffleHog                      | pre-commit                          | sí                                         |
+| Tests                              | runner del stack                           | CI                                  | sí                                         |
+| SCA de dependencias                | Dependabot                                 | continuo                            | crítico/alto                               |
+| SAST                               | Semgrep o CodeQL                           | CI                                  | crítico/alto                               |
+| IaC                                | Trivy / Checkov                            | CI (cuando haya Terraform)          | crítico/alto                               |
+| Fitness functions de arquitectura  | dependency-cruiser                         | CI                                  | sí                                         |
+| Integridad de tests (manipulación) | script propio (`check-test-integrity.mjs`) | CI, cada PR                         | sí, con escapatoria auditable              |
+| Mutation testing                   | Stryker                                    | workflow separado, módulos críticos | bajo umbral, al ejecutarse (no en cada PR) |
+| Calidad / deuda técnica            | SonarQube Server self-hosted               | CI                                  | quality gate                               |
 
 **Por qué SonarQube self-hosted y no cloud:** manejamos código de clientes con
 obligaciones de residencia de datos en la UE. La Community Edition es gratis,
@@ -70,6 +71,62 @@ un cliente exija "el código no puede salir de nuestra red", esta es la respuest
 **Ojo con las herramientas "locales":** si una herramienta corre en local pero
 manda el código a una API externa de IA, el código SÍ sale. Verificar herramienta
 por herramienta, no asumir por el nombre.
+
+#### Integridad de tests: detección de manipulación (Epic 05 / T03, Issue #23)
+
+Epic 05 arranca de una premisa incómoda: "se diseña asumiendo que el agente
+hará trampa, porque está documentado que lo hace". El job `test-integrity` de
+`ci.yml` corre `scripts/check-test-integrity.mjs` sobre `git diff
+origin/main...HEAD` en cada PR (necesita `fetch-depth: 0` en el checkout, o no
+hay con qué calcular la base de comparación) y bloquea si encuentra:
+
+- **Ficheros de test borrados.**
+- **Aserciones debilitadas:** el total de `expect(`/`assert(`/`.toThrow(`/
+  `.rejects` en los ficheros de test tocados baja entre la base y la cabeza.
+  Se cuenta el **total**, no por fichero, a propósito: un refactor legítimo
+  mueve tests entre ficheros, y contar por fichero confundiría "movido" con
+  "borrado". Si el total baja de verdad, algo se debilitó.
+- **Aserciones vacuas añadidas:** `expect(true).toBe(true)`, `expect(1).toBe(1)`,
+  `assert(true)` y familia — comparaciones que no pueden fallar nunca.
+- **`skip`/`only`/`todo` añadidos** sin un comentario en la misma línea del
+  diff que lo explique.
+- **Umbrales que bajan:** `thresholds.{high,low,break}` en
+  `stryker.config.json`, y comparaciones numéricas (`toBeGreaterThan(N)` y
+  familia) donde la línea añadida repite la línea borrada del mismo hunk con
+  un número menor.
+
+**La escapatoria, porque un gate sin escape se acaba desactivando entero:** un
+commit del PR con un trailer `Test-Integrity-Override: <motivo>` desactiva el
+bloqueo — pero no el aviso: los hallazgos se siguen imprimiendo en el log del
+job, junto al SHA del commit que los justificó, así que quedan auditables para
+siempre en el historial de git (CLAUDE.md 2.2). No hay override selectivo por
+hallazgo, es todo o nada: más código para un caso raro, y el motivo del
+trailer ya dice a qué se aplica.
+
+**Sobre el hardcodeo de valores esperados — honestidad, no falsa precisión:**
+el criterio de aceptación de T03 pide que "al menos una capa" detecte un PR
+que hardcodea el valor esperado en vez de calcularlo. Este script **no lo
+persigue con regex** — no hay forma sintáctica fiable de distinguir
+`expect(total).toBe(42)` legítimo de uno que copió el resultado observado en
+vez de calcularlo. Lo único que este gate aporta a ese problema es el
+detector de aserciones vacuas de arriba (`expect(1).toBe(1)`), que cubre el
+caso extremo — un literal contra sí mismo — no el caso general. **La
+detección real la dan otras dos capas, no esta:** el mutation testing (un
+valor hardcodeado sobrevive a mutaciones porque no depende de la lógica que
+se mutó) y el Verifier en contexto aislado (T04, ve el spec y el diff y puede
+razonar semánticamente). Si se lee "el gate de integridad detecta valores
+hardcodeados", es una lectura equivocada de lo que hace.
+
+**Demostrado localmente** (no en un run de Actions real, que este entorno no
+puede disparar): cada detector se probó provocando su violación exacta en una
+rama temporal fabricada con `git worktree` y borrada después — fichero de
+test borrado, aserción quitada sin borrar el fichero, `expect(true).toBe(true)`
+añadido, `it.skip` sin comentario, umbral de `stryker.config.json` bajado, y
+un umbral numérico dentro de un test bajado — los seis en rojo con el mensaje
+esperado; y un refactor legítimo (mover un test a otro fichero, mismo total de
+aserciones) en verde, para comprobar que el caso legítimo no dispara el gate.
+El override se probó por separado: mismo diff que borra un test, con el
+trailer en el commit, sale en verde con el aviso impreso.
 
 ### Capa 3: verificación por resultados (Fase 4)
 

@@ -1,0 +1,40 @@
+# CODEOWNERS — la segunda cerradura de los gates (Epic 05 / T03, issue #23)
+#
+# ===========================================================================
+# QUE PROBLEMA RESUELVE, Y POR QUE NINGUN SCRIPT PUEDE RESOLVERLO
+# ===========================================================================
+# El gate de integridad de tests corre en CI y bloquea. Pero un PR que EDITA el
+# propio gate, o que quita su job de la lista `needs` de `ci-ok`, ataca al
+# arbitro en vez de al partido. Dos defensas parciales existen ya:
+#
+#   * El job `test-integrity` ejecuta la copia del script que hay en la BASE, no
+#     la que trae el PR (ver .github/workflows/ci.yml).
+#   * `scripts/check-test-integrity.mjs` detecta que `ci-ok` pierda jobs de su
+#     lista `needs` o que el CI deje de invocarlo.
+#
+# Ninguna de las dos cubre el caso en que el PR BORRA el job entero: entonces no
+# corre nada y no hay nada que detectar. Eso solo lo cubre una persona mirando,
+# y esto es lo que la obliga a mirar.
+#
+# ===========================================================================
+# ESTO NO BASTA POR SI SOLO. FALTA UN PASO FUERA DEL REPOSITORIO.
+# ===========================================================================
+# CODEOWNERS solo EXIGE la revision si la proteccion de rama de `main` tiene
+# activado "Require review from Code Owners" y los checks de `ci-ok` marcados
+# como required. Esa configuracion vive en los ajustes de GitHub, no aqui, y
+# NADIE PUEDE COMPROBARLA DESDE UN COMMIT. Mientras no este puesta, este fichero
+# es documentacion, no un candado. Ver docs/quality-gates.md.
+
+# Por defecto, cualquiera del equipo.
+*                                   @JVISERASS @ndelval @mangelv011
+
+# Los gates y su configuracion: cambiarlos exige revision humana explicita.
+/.github/                           @JVISERASS @ndelval @mangelv011
+/.github/workflows/                 @JVISERASS @ndelval @mangelv011
+/.github/CODEOWNERS                 @JVISERASS @ndelval @mangelv011
+/scripts/check-test-integrity.mjs   @JVISERASS @ndelval @mangelv011
+/scripts/check-test-integrity.test.ts @JVISERASS @ndelval @mangelv011
+/stryker.config.json                @JVISERASS @ndelval @mangelv011
+/.husky/                            @JVISERASS @ndelval @mangelv011
+/.dependency-cruiser.cjs            @JVISERASS @ndelval @mangelv011
+/CLAUDE.md                          @JVISERASS @ndelval @mangelv011

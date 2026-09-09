@@ -84,6 +84,75 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+  test-integrity:
+    name: Integridad de tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # El gate diffea contra origin/main (Epic 05 / T03): sin historial
+          # completo no hay con que calcular la base de comparacion, y
+          # `git merge-base` falla en un checkout superficial.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # Sin `pnpm install`: el script solo usa la stdlib de Node y `git`, asi
+      # que no depende de node_modules ni del build de los paquetes.
+      #
+      # SE EJECUTA LA COPIA DE LA BASE, NO LA DE LA RAMA. Antes se corria
+      # `node scripts/check-test-integrity.mjs` del checkout, es decir, LA
+      # VERSION QUE TRAE EL PROPIO PR: un PR que metiera `process.exit(0)` al
+      # principio de `main()` y a la vez borrara un fichero de test salia en
+      # verde, porque el gate que juzgaba el cambio era el que el cambio habia
+      # editado. Corriendo la copia de la base, el gate que juzga es el que ya
+      # esta en main. El precio, asumido: una mejora del propio gate no surte
+      # efecto hasta que se mergea.
+      #
+      # Si el fichero no existe en la base (rama nueva que lo introduce) se cae
+      # a la copia de la rama y SE DICE en el log, para no dar por comprobado
+      # algo que no se comprobo.
+      - name: Deteccion de manipulacion de tests (script de la base)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          base="origin/${BASE_REF:-main}"
+          if git cat-file -e "$base:scripts/check-test-integrity.mjs" 2>/dev/null; then
+            git show "$base:scripts/check-test-integrity.mjs" > /tmp/check-test-integrity-base.mjs
+            echo "Ejecutando la copia de $base del gate (inmune a que el PR la edite)."
+            node /tmp/check-test-integrity-base.mjs
+          else
+            echo "AVISO: $base no tiene scripts/check-test-integrity.mjs todavia; se ejecuta la copia de la rama."
+            node scripts/check-test-integrity.mjs
+          fi
+
+  generated-tests:
+    name: Tests generados (T02)
+    runs-on: ubuntu-latest
+    # ESTE ES EL GATE DE T02 (epic 05, issue #22). El modulo, el hook de
+    # pre-commit y el README dicen "la barrera es el CI": esto es esa barrera.
+    # Sin este job la unica comprobacion era un hook local que el propio codigo
+    # declara que no detiene a nadie.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `dist/` no esta en el repositorio y el CLI importa @coord/core.
+      - run: pnpm -r build
+      # La clave vive SOLO aqui: ni en el repositorio ni en la maquina de nadie.
+      # Sin ella el CLI avisa de que la firma no se comprueba (y entonces el
+      # manifiesto protege del descuido, no de un agente). Ver
+      # docs/quality-gates.md, seccion "Tests generados".
+      - name: Los tests generados cuadran con su manifiesto firmado
+        env:
+          GENERATED_TESTS_MANIFEST_KEY: ${{ secrets.GENERATED_TESTS_MANIFEST_KEY }}
+        run: pnpm --filter @coord/agents verify:generated-tests
+
   arch:
     name: Fitness functions de arquitectura
     runs-on: ubuntu-latest
@@ -211,7 +280,7 @@ jobs:
   ci-ok:
     name: CI OK
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test, arch, sast, secrets, iac, deps]
+    needs: [lint, typecheck, test, test-integrity, generated-tests, arch, sast, secrets, iac, deps]
     if: always()
     steps:
       # Comprobacion POSITIVA: se exige que TODOS los jobs sean 'success'.

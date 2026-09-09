@@ -21,3 +21,34 @@ fi
 
 # `gitleaks protect` esta deprecado desde 8.19 en favor de `gitleaks git`.
 gitleaks git --staged --no-banner --redact --verbose --config .gitleaks.toml
+
+# ---------------------------------------------------------------------------
+# Tests generados (T02, epic 05): AVISO, NO BARRERA.
+# ---------------------------------------------------------------------------
+# El arbol `<paquete>/test/generated/` es propiedad del generador de tests, y
+# `verification/generated-tests.manifest.json` lleva el sha256 de cada fichero.
+# Esto comprueba que cuadran.
+#
+# DIGAMOSLO CLARO: un hook de cliente NO detiene a un agente. Se salta con
+# `git commit --no-verify`, y un agente que escribe en el repositorio tambien
+# puede borrar este fichero. Esta aqui para que el desarrollador honesto se
+# entere pronto. LA BARRERA ES EL CI: el job `generated-tests` de
+# .github/workflows/ci.yml corre esta misma comprobacion, esta en la lista
+# `needs` de `ci-ok`, y ademas valida la FIRMA del manifiesto con una clave que
+# no esta en esta maquina (GENERATED_TESTS_MANIFEST_KEY, secreto del
+# repositorio). Sin firma, quien reescribe un test puede reescribir sus hashes;
+# con firma, no.
+#
+# SIN `if [ -f ... ]`: el CLI se ejecuta SIEMPRE. Antes estaba envuelto en una
+# comprobacion de que el manifiesto existiera, y eso convertia "borrar el
+# manifiesto" en una forma silenciosa de desactivar el gate entero. El CLI ya
+# distingue los tres casos por su cuenta: no hay manifiesto y no hay ficheros
+# (nada que comprobar, sale 0), hay ficheros y no hay manifiesto (hallazgo
+# `untracked`, sale 1), y hay manifiesto (comprueba los hashes).
+if ! pnpm exec tsx packages/agents/src/verification/verify-generated-tests-cli.ts; then
+  echo "" >&2
+  echo "AVISO: los tests generados no cuadran con su manifiesto." >&2
+  echo "No se editan a mano: se regeneran desde los criterios de aceptacion." >&2
+  echo "Este hook es un aviso local y se puede saltar; el CI no." >&2
+  exit 1
+fi
