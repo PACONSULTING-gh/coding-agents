@@ -14,6 +14,7 @@
     "format": "prettier --write . && eslint . --fix",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:scripts": "vitest run --project scripts",
     "arch": "depcruise --config .dependency-cruiser.cjs packages apps",
     "test:mutation": "stryker run",
     "prepare": "husky",

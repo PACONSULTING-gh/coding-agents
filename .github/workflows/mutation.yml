@@ -1,9 +1,25 @@
 name: Mutation testing
 
-# Job separado y NO bloqueante (docs/quality-gates.md T06): Stryker es lento
-# y correrlo en cada PR seria exactamente el ruido que CLAUDE.md 2.4 quiere
-# evitar. Corre programado (semanal) o a mano desde la pestana Actions.
-# Se endurece (se anade a ci-ok) cuando los modulos criticos se estabilicen.
+# Job separado del `ci.yml` de cada PR (docs/quality-gates.md T06): Stryker es
+# lento y correrlo en cada PR seria exactamente el ruido que CLAUDE.md 2.4
+# quiere evitar. Corre programado (semanal) o a mano desde la pestana Actions.
+# Se anade a `ci-ok` (bloqueo por PR) cuando los modulos criticos se
+# estabilicen; packages/graph sigue sin estarlo, medido en stryker.config.json.
+#
+# LO QUE SI ES BLOQUEANTE YA (Epic 05 / T03, Issue #23): la EJECUCION de este
+# workflow, cuando corre. Antes el paso de abajo llevaba `continue-on-error:
+# true` y el job salia siempre en verde, incluso con la puntuacion de
+# mutacion por debajo de `thresholds.break` — exactamente el "gate que
+# parecia puesto y estaba roto" que este epic existe para evitar. Ya no: sin
+# `continue-on-error`, el propio exit code de Stryker (no logica nuestra)
+# tumba el job cuando la puntuacion no llega al umbral.
+#
+# Probado localmente forzando la violacion (packages/core/src/tenant.ts,
+# quitando el test que mata al mutante del cuerpo de `runWithTenant`, umbral
+# `break` bajado a 90 solo para la prueba): puntuacion real 87.50, Stryker
+# emite "Final mutation score 87.50 under breaking threshold 90, setting exit
+# code to 1 (failure)." y el proceso termina con exit 1. El unico cambio de
+# este PR es dejar de tragarnos ese exit code.
 on:
   schedule:
     - cron: '0 6 * * 1' # lunes 06:00 UTC
@@ -32,11 +48,15 @@ jobs:
       # en verde. Un error de configuracion no puede volver a pasar inadvertido.
       - name: Validar la configuracion de Stryker
         run: pnpm exec stryker run --dryRunOnly
-      - run: pnpm test:mutation
-        # SIGUE SIENDO NO BLOQUEANTE a proposito: el umbral `break` de cada
-        # modulo aun se esta calibrando (docs/quality-gates.md). Lo que ya NO se
-        # traga es un fallo de configuracion: eso lo caza el paso de arriba.
-        continue-on-error: true
+      # SIN continue-on-error: si algun modulo critico queda por debajo de su
+      # `thresholds.break`, este paso falla y arrastra al job (ver la cabecera
+      # de este fichero para la demostracion local de que esto es real).
+      - name: Mutation testing sobre los modulos criticos
+        run: pnpm test:mutation
+      - name: Mensaje claro si el umbral no se alcanzo
+        if: failure()
+        run: |
+          echo "::error::La puntuacion de mutacion de al menos un modulo critico no llega a su umbral (thresholds.break en stryker.config.json). Esto significa que los tests de ese modulo NO comprueban lo suficiente: pasan aunque el comportamiento cambie. No es un fallo de infraestructura, es una senal real (CLAUDE.md 7) — revisa el informe HTML subido como artefacto (mutation-report) para ver que mutante sobrevivio y que test deberia haberlo matado."
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -67,11 +67,27 @@ export default tseslint.config(
     },
   },
   {
-    // Ficheros de config (raiz y de cada paquete/app): no forman parte del
-    // rootDir "src" de ningun tsconfig, asi que se lintean sin chequeo de tipos.
-    files: ['*.mjs', '*.cjs', '*.ts', '**/vitest.config.ts'],
+    // Ficheros de config (raiz y de cada paquete/app) y scripts de tooling en
+    // scripts/: ninguno forma parte del rootDir "src" de ningun tsconfig
+    // (scripts/ no tiene composite ni esta en las referencias de tsconfig.json),
+    // asi que se lintean sin chequeo de tipos.
+    files: ['*.mjs', '*.cjs', '*.ts', '**/vitest.config.ts', 'scripts/**/*.mjs', 'scripts/**/*.ts'],
     ignores: ['packages/*/src/**', 'apps/*/src/**'],
     extends: [tseslint.configs.disableTypeChecked],
+  },
+  {
+    // scripts/*.mjs corren con `node` directamente (fuera de cualquier
+    // tsconfig, ver el bloque de arriba), asi que ESLint no conoce sus
+    // globales de entorno por defecto. Solo los dos que se usan de verdad:
+    // anadir "globals" como dependencia para esto seria una talla XXL para
+    // un problema de dos nombres (CLAUDE.md 2.4).
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
   },
   {
     // Ficheros CommonJS de config en la raiz (dependency-cruiser): declara
