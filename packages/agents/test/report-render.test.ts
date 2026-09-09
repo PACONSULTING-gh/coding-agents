@@ -1,3 +1,4 @@
+import { ValidationError } from '@coord/core'
 import { describe, expect, it } from 'vitest'
 
 import { buildConformanceReport } from '../src/verification/report.js'
@@ -7,7 +8,12 @@ import {
   renderConformanceReportPlainText,
   type RenderedConformanceReport,
 } from '../src/verification/report-render.js'
-import { makeVerdicts, makeVerificationResult, SAMPLE_ARTIFACT } from './support/report-fixtures.js'
+import {
+  makeVerdict,
+  makeVerdicts,
+  makeVerificationResult,
+  SAMPLE_ARTIFACT,
+} from './support/report-fixtures.js'
 import type { CriterionVerdict } from '../src/verification/verifier.js'
 
 /**
@@ -305,5 +311,240 @@ describe('la salida literal (lo que un humano ve de verdad)', () => {
     )
     expect(rendered.text).toContain('criterio(s) PASS')
     expect(rendered.text).toContain('Ningun FAIL ni SIN_EVIDENCIA se ha recortado')
+  })
+})
+
+// ===========================================================================
+describe('la frontera del presupuesto: cabe es "<=", no "<"', () => {
+  /**
+   * `fitsBudget` compara con `<=`. Un informe que mide EXACTAMENTE el
+   * presupuesto cabe; uno que se pasa por una sola linea o un solo caracter,
+   * no. La diferencia entre `<` y `<=` no la nota ningun test que use
+   * presupuestos holgados o absurdamente estrechos —y eran los dos unicos
+   * que habia—, asi que se comprueba en el borde exacto: se mide el
+   * renderizado sin comprimir y se le da ese mismo tamaño como presupuesto.
+   */
+  it.each([
+    ['markdown', renderConformanceReportMarkdown],
+    ['texto plano', renderConformanceReportPlainText],
+  ] as const)(
+    '%s: justo en el limite cabe; una linea o un caracter menos, no',
+    (_label, render) => {
+      const report = reportWith(makeVerdicts(2, { failCount: 1 }))
+      const sinComprimir = render(report, { maxLines: 1_000, maxChars: 100_000 })
+      expect(sinComprimir.compactionLevel).toBe(0)
+      const { lineCount, charCount } = sinComprimir
+
+      // Presupuesto EXACTO: cabe sin comprimir nada.
+      const justo = render(report, { maxLines: lineCount, maxChars: charCount })
+      expect(justo.fitsOnScreen).toBe(true)
+      expect(justo.compactionLevel).toBe(0)
+      expect(justo.text).toBe(sinComprimir.text)
+
+      // Una linea menos: la pasada 0 ya no cabe y hay que resumir los PASS.
+      const unaLineaMenos = render(report, { maxLines: lineCount - 1, maxChars: charCount })
+      expect(unaLineaMenos.compactionLevel).toBe(1)
+      expect(unaLineaMenos.summarizedPassCount).toBe(1)
+
+      // Un caracter menos: igual. El limite de caracteres no es decorativo.
+      const unCaracterMenos = render(report, { maxLines: lineCount, maxChars: charCount - 1 })
+      expect(unCaracterMenos.compactionLevel).toBe(1)
+      expect(unCaracterMenos.summarizedPassCount).toBe(1)
+    },
+  )
+})
+
+// ===========================================================================
+describe('las tres etiquetas de veredicto, y el total que las suma', () => {
+  /**
+   * SIN_EVIDENCIA es el veredicto por el que existe el epic —el permiso
+   * explicito para no dar un PASS optimista— y hasta ahora ningun test
+   * comprobaba que su etiqueta llegara escrita al informe. Tampoco habia
+   * ninguno con las tres cuentas distintas de cero, asi que la suma del total
+   * podia ser cualquier operacion.
+   */
+  it('markdown: PASS, FAIL y SIN_EVIDENCIA, cada uno con su etiqueta y sumados', () => {
+    const verdicts = [
+      makeVerdict(1, 'PASS'),
+      makeVerdict(2, 'FAIL'),
+      makeVerdict(3, 'SIN_EVIDENCIA'),
+    ]
+    const rendered = renderConformanceReportMarkdown(reportWith(verdicts))
+
+    expect(rendered.text).toContain('PASS: 1 · FAIL: 1 · SIN_EVIDENCIA: 1 · Total: 3')
+    expect(rendered.text).toContain('### 1. PASS — criterion-1')
+    expect(rendered.text).toContain('### 2. FAIL — criterion-2')
+    expect(rendered.text).toContain('### 3. SIN_EVIDENCIA — criterion-3')
+    // Un SIN_EVIDENCIA nunca se resume: conserva su razonamiento entero.
+    expect(rendered.text).toContain(verdicts[2]?.reasoning ?? '')
+    expect(rendered.compactionLevel).toBe(0)
+  })
+})
+
+// ===========================================================================
+describe('comprimir no reordena: cada racha de PASS se queda en su sitio', () => {
+  /**
+   * El caso que ningun test tocaba: PASS resumidos ANTES de un bloque con
+   * detalle, y dos rachas separadas. Es donde vive la unica logica no trivial
+   * de `renderBlocks` (vaciar la racha pendiente justo antes de emitir un
+   * bloque detallado), y sin este test daba igual que las lineas PASS
+   * acabaran todas juntas al final del informe: ninguna asercion miraba el
+   * ORDEN, solo la presencia.
+   *
+   * Presupuesto elegido a proposito para que la pasada 0 no quepa y la 1 si:
+   * es la unica forma de ejercitar el intercalado.
+   */
+  const verdicts = [1, 2, 3, 4, 5, 6].map((n) =>
+    makeVerdict(n, n === 3 || n === 6 ? 'FAIL' : 'PASS'),
+  )
+  const criterio = (n: number): CriterionVerdict => {
+    const verdict = verdicts[n - 1]
+    if (verdict === undefined) throw new Error(`la fixture no tiene criterio ${String(n)}`)
+    return verdict
+  }
+  const BUDGET = { maxLines: 30, maxChars: 100_000 }
+  const NOTA =
+    '4 criterio(s) PASS se resumieron a una linea para que el informe quepa en pantalla. ' +
+    'Estan TODOS por su id; lo que se quita es el razonamiento y las citas de los PASS. ' +
+    'Ningun FAIL ni SIN_EVIDENCIA se ha recortado.'
+
+  it('markdown: PASS 1-2, FAIL 3, PASS 4-5, FAIL 6, en ese orden', () => {
+    const rendered = renderConformanceReportMarkdown(reportWith(verdicts), BUDGET)
+
+    expect(rendered.compactionLevel).toBe(1)
+    expect(rendered.text).toBe(
+      [
+        '# Informe de conformidad — issue-25',
+        '',
+        '**Veredicto global: NO APTO**',
+        '',
+        `Commit verificado: \`${SAMPLE_ARTIFACT.headSha}\` (base \`${SAMPLE_ARTIFACT.baseSha}\`)`,
+        '',
+        'Modelo: `claude-opus-5` · PASS: 4 · FAIL: 2 · SIN_EVIDENCIA: 0 · Total: 6 · Tokens: 0 entrada (0 de cache) · 0 salida',
+        '',
+        `_${NOTA}_`,
+        '',
+        '- PASS · criterion-1',
+        '- PASS · criterion-2',
+        '',
+        '### 3. FAIL — criterion-3',
+        `**Criterio:** "${criterio(3).criterionQuote}"`,
+        `**Evidencia** (diff): "${criterio(3).evidenceQuote}"`,
+        `**Razonamiento:** ${criterio(3).reasoning}`,
+        '',
+        '- PASS · criterion-4',
+        '- PASS · criterion-5',
+        '',
+        '### 6. FAIL — criterion-6',
+        `**Criterio:** "${criterio(6).criterionQuote}"`,
+        `**Evidencia** (diff): "${criterio(6).evidenceQuote}"`,
+        `**Razonamiento:** ${criterio(6).reasoning}`,
+      ].join('\n'),
+    )
+  })
+
+  it('texto plano: mismo orden, misma nota sin los guiones bajos de Markdown', () => {
+    const rendered = renderConformanceReportPlainText(reportWith(verdicts), BUDGET)
+
+    expect(rendered.compactionLevel).toBe(1)
+    expect(rendered.text).toBe(
+      [
+        'INFORME DE CONFORMIDAD — issue-25',
+        '='.repeat('INFORME DE CONFORMIDAD — issue-25'.length),
+        '',
+        'VEREDICTO GLOBAL: NO APTO',
+        '',
+        `Commit verificado: ${SAMPLE_ARTIFACT.headSha} (base ${SAMPLE_ARTIFACT.baseSha})`,
+        '',
+        'Modelo: claude-opus-5 | PASS: 4 · FAIL: 2 · SIN_EVIDENCIA: 0 · Total: 6 | Tokens: 0 entrada (0 de cache) · 0 salida',
+        '',
+        NOTA,
+        '',
+        '- PASS · criterion-1',
+        '- PASS · criterion-2',
+        '',
+        '3. FAIL — criterion-3',
+        `   Criterio: "${criterio(3).criterionQuote}"`,
+        `   Evidencia (diff): "${criterio(3).evidenceQuote}"`,
+        `   Razonamiento: ${criterio(3).reasoning}`,
+        '',
+        '- PASS · criterion-4',
+        '- PASS · criterion-5',
+        '',
+        '6. FAIL — criterion-6',
+        `   Criterio: "${criterio(6).criterionQuote}"`,
+        `   Evidencia (diff): "${criterio(6).evidenceQuote}"`,
+        `   Razonamiento: ${criterio(6).reasoning}`,
+      ].join('\n'),
+    )
+  })
+})
+
+// ===========================================================================
+describe('agrupar PASS: cuantas lineas exactamente, y ninguna vacia', () => {
+  /**
+   * `- PASS · ` con la lista vacia detras es una linea que no dice nada y que
+   * nadie habria notado: los tests de agrupado solo comprobaban que los ids
+   * ESTUVIERAN, no cuantas lineas salian. Con 200 ids de 8 en 8 son 25 lineas
+   * exactas; una mas significa que el bucle se pasa del final del array.
+   */
+  it('200 PASS salen en exactamente 25 lineas de 8 ids, y no hay ni una linea mas', () => {
+    const rendered = renderConformanceReportMarkdown(reportWith(makeVerdicts(200)))
+
+    // El informe ENTERO, linea a linea. Filtrar las que empiezan por "- PASS ·"
+    // y contarlas no basta: una linea de sobra que no case con ese prefijo se
+    // cuela sin que nadie la vea, y una racha vacia al final del bucle sale
+    // como "- PASS ·" a secas porque `trimEnd` se come su ultimo espacio.
+    const grupos = Array.from(
+      { length: Math.ceil(200 / 8) },
+      (_unused, grupo) =>
+        `- PASS · ${Array.from(
+          { length: 8 },
+          (_id, posicion) => `criterion-${String(grupo * 8 + posicion + 1)}`,
+        ).join(', ')}`,
+    )
+    expect(rendered.compactionLevel).toBe(2)
+    expect(rendered.text).toBe(
+      [
+        '# Informe de conformidad — issue-25',
+        '',
+        '**Veredicto global: APTO**',
+        '',
+        `Commit verificado: \`${SAMPLE_ARTIFACT.headSha}\` (base \`${SAMPLE_ARTIFACT.baseSha}\`)`,
+        '',
+        'Modelo: `claude-opus-5` · PASS: 200 · FAIL: 0 · SIN_EVIDENCIA: 0 · Total: 200 · Tokens: 0 entrada (0 de cache) · 0 salida',
+        '',
+        '_200 criterio(s) PASS se resumieron y agrupados varios por linea para que el informe quepa en pantalla. Estan TODOS por su id; lo que se quita es el razonamiento y las citas de los PASS. Ningun FAIL ni SIN_EVIDENCIA se ha recortado._',
+        '',
+        ...grupos,
+      ].join('\n'),
+    )
+  })
+
+  it('la nota dice que se AGRUPARON, no solo que se resumieron', () => {
+    // El texto de la nota cambia entre la pasada 1 y la 2, y esa es la unica
+    // señal que tiene el humano de cuanto se ha comprimido lo que esta leyendo.
+    const nivel2 = renderConformanceReportMarkdown(reportWith(makeVerdicts(200)))
+    expect(nivel2.text).toContain(
+      '_200 criterio(s) PASS se resumieron y agrupados varios por linea para que el informe quepa en pantalla.',
+    )
+    expect(nivel2.text).not.toContain('se resumieron a una linea')
+  })
+})
+
+// ===========================================================================
+describe('un informe sin veredictos se rechaza diciendo por que', () => {
+  it.each([
+    ['markdown', renderConformanceReportMarkdown],
+    ['texto plano', renderConformanceReportPlainText],
+  ] as const)('%s: ValidationError con el motivo, no un error mudo', (_label, render) => {
+    const report = reportWith([])
+    // El mensaje forma parte del contrato: quien lo lea tiene que entender que
+    // el problema es que no hay nada que decidir, no un fallo del renderizado.
+    expect(() => render(report)).toThrow(ValidationError)
+    expect(() => render(report)).toThrow(
+      'El informe de issue-25 no trae ni un veredicto. Un informe vacio no es un informe: ' +
+        'no hay nada con que decidir.',
+    )
   })
 })
