@@ -1,6 +1,7 @@
 export * from './schema.js'
 export * from './queryable.js'
 export * from './audit.js'
+export * from './acceptance-criteria.js'
 export * from './client.js'
 export * from './github-installations.js'
 export * from './webhook-deliveries.js'

@@ -16,7 +16,7 @@ import {
   type ClaimSubjectKind,
   type QueuePort,
 } from '@coord/core'
-import { withTenantConnection, type TenantQuery } from '@coord/db'
+import { assertCriteriaApproved, withTenantConnection, type TenantQuery } from '@coord/db'
 import { z } from 'zod'
 
 import { findDependencies, findDependents, findNodesByPath } from './queries.js'
@@ -379,6 +379,32 @@ export async function claim(input: ClaimInput): Promise<ClaimLease> {
   const keys = subjects.map((subject) => subject.key)
 
   return withTenantConnection(async (tx) => {
+    // ---------------------------------------------------------------------
+    // LA PUERTA DE T01 (epic 05). LEE ESTO ANTES DE QUITARLA.
+    // ---------------------------------------------------------------------
+    // "Una tarea sin criterios aprobados no puede empezar" es el primer
+    // criterio de aceptacion de T01, y este es el unico sitio del sistema
+    // donde una tarea empieza: reclamarla ES empezarla.
+    //
+    // El rechazo NO es un booleano: `assertCriteriaApproved` lanza
+    // `AcceptanceCriteriaNotApprovedError` con el estado entero, asi que el
+    // mensaje distingue "no hay criterios" de "los hay pero nadie los aprobo"
+    // de "se aprobaron y luego cambiaron" — tres situaciones con tres
+    // remedios distintos.
+    //
+    // Solo se comprueba sobre el sujeto `issue`, porque un fichero no es una
+    // tarea y no tiene criterios de aceptacion. LIMITACION CONOCIDA: quien
+    // reclame ficheros sueltos, sin issue, no pasa por esta puerta. Cerrar ese
+    // hueco es una decision de producto (¿se prohibe reclamar sin issue?), no
+    // un descuido, y no se toma aqui a escondidas (CLAUDE.md 2.1).
+    //
+    // Va ANTES del advisory lock: es una lectura, y no hay ninguna razon para
+    // serializar a todo el repositorio detras de ella. Al ir dentro de la
+    // misma transaccion, lee el mismo instante que el resto de la operacion.
+    if (parsed.subject.kind === 'issue') {
+      await assertCriteriaApproved(parsed.subject.key)
+    }
+
     await lockRepository(tx, parsed.repoId)
 
     // SEGADO. Materializa la caducidad en `released_at` para los sujetos que se

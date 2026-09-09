@@ -14,7 +14,13 @@ import { z } from 'zod'
 import { claim } from '../../src/claims.js'
 import { repoIdForRepository } from '../../src/ingest/repo-id.js'
 import { startDatabase, type StartedDatabase } from '../support/database.js'
-import { createEdges, createFileNodes, createTenant, createUser } from '../support/fixtures.js'
+import {
+  approveIssueCriteria,
+  createEdges,
+  createFileNodes,
+  createTenant,
+  createUser,
+} from '../support/fixtures.js'
 import { createTempRepoAt } from '../support/git-repo.js'
 
 /**
@@ -568,6 +574,9 @@ describe('aislamiento entre tenants, y las herramientas sin lo que necesitan', (
         source: 'static',
       },
     ])
+    // T01 del epic 05: sin criterios aprobados, `claim()` sobre un issue se
+    // rechaza. Este test va de aislamiento por tenant, no de esa puerta.
+    await approveIssueCriteria(tenantA, ['1'])
     await runWithTenant({ tenantId: tenantA, actorId: 'agent-a' }, () =>
       claim({
         repoId: repoIdA,

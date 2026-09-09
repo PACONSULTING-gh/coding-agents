@@ -212,6 +212,28 @@ async function seedTenant(client: Client, slug: string): Promise<TenantFixture> 
        VALUES ($1, $2, $1, $3, 'issue', '15', 'user', $4, $5, now() + interval '1 hour')`,
       [claimGroupId, id, repoId, userIds[0], `Dev ${slug}`],
     )
+
+    // Criterios de aceptacion y su aprobacion (migracion 0010). Igual que con
+    // los claims, los dos fixtures usan A PROPOSITO el MISMO `task_ref`: la
+    // unicidad de (tenant_id, task_ref, ordinal) es por tenant, asi que si el
+    // aislamiento dependiera de que las claves no chocan, esto reventaria en
+    // vez de pasar por casualidad.
+    await client.query(
+      `INSERT INTO acceptance_criteria
+         (tenant_id, task_ref, ordinal, given_text, when_text, then_text, created_by)
+       VALUES ($1, '15', 1, $2, 'un agente intenta reclamar el issue 15',
+               'el claim se concede y aparece en la vista de claims activos', $3)`,
+      [id, `el issue #15 de ${slug}`, `agente-${slug}`],
+    )
+    await client.query(
+      `INSERT INTO acceptance_criteria_approvals
+         (tenant_id, task_ref, content_hash, approved_by)
+       VALUES ($1, '15', $2, $3)`,
+      // El hash de verdad lo calcula computeCriteriaContentHash; aqui basta un
+      // valor con la forma correcta, porque lo que se prueba en este fichero es
+      // el aislamiento, no la caducidad (eso esta en acceptance-criteria.test.ts).
+      [id, 'f'.repeat(64), userIds[0]],
+    )
   })
 
   return { id, slug, userIds, teamId, skillId, installationId }
