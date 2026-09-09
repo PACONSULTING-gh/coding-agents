@@ -59,6 +59,13 @@ siendo revisión humana, igual que el resto de la Definition of Done.
 
 ## Diagramas actuales
 
-| Fichero                          | Qué cuenta                                                                                                  |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `arquitectura.architecture.json` | Arquitectura de la Fase 1: del webhook de GitHub al servidor MCP, con la frontera de aislamiento por tenant |
+| Fichero                          | Tipo         | Qué cuenta                                                                          | ¿Evidencia verificada? |
+| -------------------------------- | ------------ | ----------------------------------------------------------------------------------- | ---------------------- |
+| `arquitectura.architecture.json` | architecture | Los módulos, del webhook al servidor MCP, con la frontera de aislamiento por tenant | **Sí**, 11 referencias |
+| `webhook.sequence.json`          | sequence     | El ciclo de vida de una entrega, con los tres rechazos                              | No                     |
+| `ingesta.dataflow.json`          | dataflow     | Por qué la indexación es incremental y no un rebuild                                | No                     |
+
+**`--repo-root` solo lo admite `architecture`.** Los diagramas de secuencia y
+flujo de datos no tienen esa red de seguridad: sus afirmaciones se revisan a mano,
+como cualquier prosa. Conviene tenerlo presente antes de fiarse de ellos igual que
+del de arquitectura.

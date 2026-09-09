@@ -4,6 +4,10 @@ Este documento refleja lo que existe **de verdad** en el repo a fecha de T05
 del epic 02 (epic 02 completo). No
 describe fases futuras como si ya estuvieran construidas.
 
+> **Documentación por fases:** [`fases/`](fases/) tiene un documento técnico por
+> fase con lo que existe de verdad en cada una, sus números medidos y su deuda
+> declarada. Este documento describe el conjunto; aquél, cada pieza.
+
 > **Diagrama:** `docs/diagrams/arquitectura.architecture.json`, entregado como HTML
 > interactivo con `pnpm diagrams`. Cada componente declara de qué ficheros del repo
 > habla, y la entrega **falla** si alguna de esas rutas no existe en la revisión

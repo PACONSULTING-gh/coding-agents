@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "Ingesta incremental del grafo de dependencias",
+    "quality_profile": "showcase",
+    "viewBox": [1068, 430]
+  },
+  "stages": [
+    {
+      "label": "Origen"
+    },
+    {
+      "label": "Planificación"
+    },
+    {
+      "label": "Parseo"
+    },
+    {
+      "label": "Resolución"
+    },
+    {
+      "label": "Grafo y consulta"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "repo",
+      "type": "external",
+      "label": "checkout",
+      "sublabel": "repo en disco",
+      "stage": 0,
+      "row": 0
+    },
+    {
+      "id": "lsfiles",
+      "type": "backend",
+      "label": "git ls-files",
+      "sublabel": "respeta .gitignore",
+      "stage": 1,
+      "row": 0
+    },
+    {
+      "id": "hash",
+      "type": "database",
+      "label": "graph_files",
+      "sublabel": "hash de contenido",
+      "stage": 1,
+      "row": 1
+    },
+    {
+      "id": "treesitter",
+      "type": "backend",
+      "label": "tree-sitter",
+      "sublabel": "TS · JS · Python",
+      "stage": 2,
+      "row": 0
+    },
+    {
+      "id": "resolve",
+      "type": "backend",
+      "label": "resolución",
+      "sublabel": "imports y workspace",
+      "stage": 3,
+      "row": 0,
+      "tag": "static"
+    },
+    {
+      "id": "graphdb",
+      "type": "database",
+      "label": "graph_nodes/edges",
+      "sublabel": "RLS forzada",
+      "stage": 4,
+      "row": 0
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "servidor MCP",
+      "sublabel": "consultas",
+      "stage": 4,
+      "row": 1
+    }
+  ],
+  "flows": [
+    {
+      "from": "repo",
+      "to": "lsfiles",
+      "label": "ficheros seguidos"
+    },
+    {
+      "from": "lsfiles",
+      "to": "hash",
+      "label": "lista indexable",
+      "labelDy": 30,
+      "labelDx": -55
+    },
+    {
+      "from": "hash",
+      "to": "treesitter",
+      "label": "solo lo que cambió de hash",
+      "variant": "emphasis"
+    },
+    {
+      "from": "treesitter",
+      "to": "resolve",
+      "label": "símbolos e imports"
+    },
+    {
+      "from": "resolve",
+      "to": "graphdb",
+      "label": "imports · calls",
+      "classification": "source=static"
+    },
+    {
+      "from": "graphdb",
+      "to": "mcp",
+      "label": "dependientes",
+      "labelDy": 22
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Por qué es incremental, y qué NO ejercita este repo",
+      "items": [
+        "Cada fichero guarda su hash: si no cambió, no se reparsea. Medido: 119 ficheros → 621 nodos y 1.387 aristas en 600 ms; segunda pasada, 0 reparseados en 38 ms",
+        "El checkpoint va en la MISMA transacción que el lote, así un SIGKILL no deja el progreso mintiendo",
+        "En la base: 2.551 aristas source=static y CERO de build (no hay Nx ni Turborepo) ni de git (12 commits, por debajo del umbral)"
+      ]
+    }
+  ]
+}

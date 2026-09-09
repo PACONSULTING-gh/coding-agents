@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Ciclo de vida de un webhook de GitHub",
+    "quality_profile": "showcase",
+    "column_fit": "spread",
+    "viewBox": [1080, 580]
+  },
+  "participants": [
+    {
+      "id": "github",
+      "type": "external",
+      "label": "GitHub",
+      "sublabel": "GitHub App"
+    },
+    {
+      "id": "webhook",
+      "type": "backend",
+      "label": "apps/webhook",
+      "sublabel": "Fastify"
+    },
+    {
+      "id": "hmac",
+      "type": "security",
+      "label": "verify-signature",
+      "sublabel": "packages/github"
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "Postgres",
+      "sublabel": "vía packages/db"
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "packages/queue",
+      "sublabel": "pg-boss"
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "apps/worker",
+      "sublabel": "handlers"
+    }
+  ],
+  "segments": [
+    {
+      "from": 144,
+      "to": 414,
+      "label": "Aceptación — objetivo < 500 ms"
+    },
+    {
+      "from": 424,
+      "to": 520,
+      "label": "Proceso asíncrono"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "webhook",
+      "from": 164,
+      "to": 410,
+      "type": "backend"
+    },
+    {
+      "participant": "worker",
+      "from": 432,
+      "to": 500,
+      "type": "backend"
+    }
+  ],
+  "messages": [
+    {
+      "from": "github",
+      "to": "webhook",
+      "y": 170,
+      "label": "POST /webhooks/github",
+      "variant": "emphasis"
+    },
+    {
+      "from": "webhook",
+      "to": "hmac",
+      "y": 199,
+      "label": "HMAC sobre el cuerpo CRUDO",
+      "variant": "security"
+    },
+    {
+      "from": "hmac",
+      "to": "webhook",
+      "y": 228,
+      "label": "comparación en tiempo constante",
+      "variant": "return"
+    },
+    {
+      "from": "webhook",
+      "to": "db",
+      "y": 257,
+      "label": "INSERT delivery ON CONFLICT DO NOTHING"
+    },
+    {
+      "from": "db",
+      "to": "webhook",
+      "y": 286,
+      "label": "1 fila = entrega nueva",
+      "variant": "return"
+    },
+    {
+      "from": "webhook",
+      "to": "db",
+      "y": 315,
+      "label": "installation_id → tenant"
+    },
+    {
+      "from": "db",
+      "to": "webhook",
+      "y": 344,
+      "label": "tenant_id",
+      "variant": "return"
+    },
+    {
+      "from": "webhook",
+      "to": "queue",
+      "y": 373,
+      "label": "enqueue dentro de runWithTenant"
+    },
+    {
+      "from": "webhook",
+      "to": "github",
+      "y": 402,
+      "label": "200 queued · medido 19 ms",
+      "variant": "return"
+    },
+    {
+      "from": "queue",
+      "to": "worker",
+      "y": 438,
+      "label": "fetch — exactamente una vez"
+    },
+    {
+      "from": "worker",
+      "to": "db",
+      "y": 466,
+      "label": "appendAuditEntry en el tenant"
+    },
+    {
+      "from": "worker",
+      "to": "queue",
+      "y": 494,
+      "label": "completed",
+      "variant": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Los tres rechazos, y el detalle que invalida la firma",
+      "items": [
+        "Firma inválida → 401 y el intento queda en audit_log; el cuerpo no autenticado se parsea con tope de 256 KB",
+        "Mismo x-github-delivery dos veces → 200 duplicate: la defensa es la restricción UNIQUE, no un SELECT previo, que tiene carrera",
+        "El HMAC va sobre los bytes CRUDOS: reserializar el JSON cambia el cuerpo y la verificación pasa a ser decorativa"
+      ]
+    }
+  ]
+}

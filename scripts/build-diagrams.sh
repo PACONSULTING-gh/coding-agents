@@ -32,9 +32,15 @@ for type in architecture workflow sequence dataflow lifecycle; do
     found=1
     echo "-> ${base} (${type})"
     # --repo-root hace que las rutas de `sources` se comprueben contra el repo:
-    # un diagrama que apunta a un fichero que no existe NO se entrega.
+    # un diagrama que apunta a un fichero que no existe NO se entrega. Solo lo
+    # admite `architecture`: los demas tipos no tienen evidencia de repositorio,
+    # y pasarselo aborta la entrega. Ver docs/diagrams/README.md.
+    evidence=()
+    if [ "${type}" = "architecture" ]; then
+      evidence=(--repo-root "${root}")
+    fi
     node "${cli}" deliver "${type}" "${spec}" "${out}" \
-      --quality showcase --repo-root "${root}" --json |
+      --quality showcase "${evidence[@]}" --json |
       python3 -c "
 import json, sys
 raw = sys.stdin.read()
