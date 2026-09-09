@@ -178,11 +178,45 @@ primera versión de este ADR:
 2. **El ámbito de los advisory locks es la BASE DE DATOS**, no el cluster. Tomar
    el cerrojo en la base de test recién creada no habría excluido a nadie.
 
-**Lo que esto deja pendiente:** 42,86 % está por debajo del `break=60`, así que
-`pg-boss-queue.ts` **no vuelve todavía** a la lista `mutate`. Dejarlo entrar
-pondría el workflow semanal en rojo de forma permanente, y un gate que siempre
-está rojo se acaba ignorando —que es el mismo fallo, por el otro extremo—.
-Entra cuando los supervivientes bajen del umbral (issue #26).
+### El endurecimiento que la medida honesta hizo posible
+
+Con la cifra real a la vista (42,86 %), se atacaron los supervivientes de
+`pg-boss-queue.ts`: **41,18 % → 77,54 %**, con 26 tests nuevos. Lo que no estaba
+protegido y ahora sí:
+
+- **La serialización del error del handler.** Ningún test miraba `output` del
+  job: se comprobaba que acababa en `failed` y nada más. Quedaban sin sujetar la
+  cadena de `cause` (y su tope de profundidad), el `code`, y que un `throw` de
+  algo que no es un `Error` no se pierda. Es exactamente lo que se lee el día del
+  incidente, cuando el proceso que lo vio ya no existe.
+- **El mapeo de opciones de `enqueue` y `schedule`**, campo a campo. `schedule`
+  no tenía **ni un test**.
+- **`fromEnv`**, la puerta por la que entra la cola en producción: tampoco tenía
+  ninguno, y es puro (no necesita base de datos).
+- **El aviso de deriva de cola.** Se comprobaban los valores reconciliados, no el
+  aviso — así que podía quedarse mudo, y ese aviso es la única constancia de que
+  la cola no estaba como decía la configuración.
+- **`checkHealth` con el esquema borrado debajo**, que es lo que separa un health
+  check de verdad de leer un booleano en memoria.
+
+Lo que se dejó vivo a conciencia: textos de log, ramas defensivas que el propio
+autor documentó como inalcanzables (`id === null` con la política `standard`), y
+opciones difíciles de observar. Escribir tests para eso sería escribir para la
+métrica.
+
+**El gate completo queda en 83,94 %** con los siete módulos dentro.
+
+### La concurrencia ya no mueve la cifra
+
+Era la razón de fijar `concurrency: 4`. Medido sobre la misma suite, cambiando
+solo ese número: **77,54 %** con 4 workers (8 min 41 s) y **78,81 %** con 12
+(3 min 45 s). **1,27 puntos**, frente a los **33** que se movía antes
+(76,47 → 43,70). El residuo no es la patología de los contenedores: son tests de
+integración con temporización real donde un par de mutantes caen o no según el
+momento. Subir el número en local para ir más rápido es seguro.
+
+**Lo que esto deja pendiente:** `packages/graph`, que sigue con su propio soporte de
+test y 13 ficheros.
 
 ## Alternativas descartadas
 
