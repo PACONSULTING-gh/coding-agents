@@ -159,7 +159,7 @@ describe('2. deteccion de manipulacion', () => {
       signed: { manifest: manifiestoDeDosFicheros() },
       filesOnDisk: new Map([
         // Debilitar una asercion es una de las trampas documentadas del epic.
-        [RUTA_UNO, CONTENIDO_UNO.replace("it('uno'", "it.skip('uno'")],
+        [RUTA_UNO, CONTENIDO_UNO.replace("it('uno'", "it.skip('uno'")], // dato de prueba del detector, no un skip real
         [RUTA_DOS, CONTENIDO_DOS],
       ]),
     })
@@ -246,7 +246,7 @@ describe('3. la firma, que es lo unico que para a un agente', () => {
 
     // Justo lo que haria un agente que quiere que su edicion pase el gate:
     // cambia el test y ajusta el hash para que cuadre.
-    const contenidoDebilitado = CONTENIDO_UNO.replace("it('uno'", "it.skip('uno'")
+    const contenidoDebilitado = CONTENIDO_UNO.replace("it('uno'", "it.skip('uno'") // dato de prueba del detector, no un skip real
     const falsificado = upsertTaskManifest(
       firmado.manifest,
       buildTaskManifest({
