@@ -2,9 +2,10 @@
  * API publica de @coord/github.
  *
  * Aqui vive todo lo que sabe hablar con GitHub: el cliente de la App, los
- * tokens de instalacion y la verificacion de firmas. `octokit` es un detalle de
- * implementacion de este paquete y no debe asomar fuera; lo comprueba la regla
- * `octokit-solo-en-github` de dependency-cruiser.
+ * tokens de instalacion, la verificacion de firmas y la publicacion de
+ * comentarios de PR (usada por el informe de conformidad del epic 05, T05).
+ * `octokit` es un detalle de implementacion de este paquete y no debe asomar
+ * fuera; lo comprueba la regla `octokit-solo-en-github` de dependency-cruiser.
  */
 export {
   createGitHubApp,
@@ -58,3 +59,6 @@ export type {
   GithubAccountType,
   RepositorySelection,
 } from './installations.js'
+
+export { publishPullRequestComment } from './pull-request-comments.js'
+export type { PullRequestCommentTarget, PublishedComment } from './pull-request-comments.js'
