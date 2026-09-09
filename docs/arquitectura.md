@@ -4,6 +4,12 @@ Este documento refleja lo que existe **de verdad** en el repo a fecha de T05
 del epic 02 (epic 02 completo). No
 describe fases futuras como si ya estuvieran construidas.
 
+> **Diagrama:** `docs/diagrams/arquitectura.architecture.json`, entregado como HTML
+> interactivo con `pnpm diagrams`. Cada componente declara de qué ficheros del repo
+> habla, y la entrega **falla** si alguna de esas rutas no existe en la revisión
+> fijada — así el diagrama no puede quedarse contando algo que ya no es cierto.
+> Ver `docs/diagrams/README.md` y el ADR 0006.
+
 ## 1. Contexto
 
 El sistema es una capa de coordinación que se sienta encima de GitHub (Issues,

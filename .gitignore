@@ -9,3 +9,11 @@ coverage
 .stryker-tmp
 reports
 .DS_Store
+
+# Skill de diagramas: se instala con ./scripts/install-archify.sh, version
+# fijada y checksum comprobado. No se vendoriza (2,5 MB).
+.claude/skills/archify/
+
+# Diagramas renderizados: artefacto, como dist/. La fuente es el .json.
+# Se regeneran con `pnpm diagrams`.
+docs/diagrams/*.html

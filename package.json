@@ -16,7 +16,9 @@
     "test": "vitest run",
     "arch": "depcruise --config .dependency-cruiser.cjs packages apps",
     "test:mutation": "stryker run",
-    "prepare": "husky"
+    "prepare": "husky",
+    "diagrams": "./scripts/build-diagrams.sh",
+    "diagrams:install": "./scripts/install-archify.sh"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

@@ -5,7 +5,15 @@ import eslintConfigPrettier from 'eslint-config-prettier'
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/.stryker-tmp/**'],
+    ignores: [
+      // Skills de terceros instaladas con version fijada (ver scripts/install-archify.sh).
+      // Son codigo vendorizado que no mantenemos: ni se lintan ni se formatean.
+      '.claude/skills/**',
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      '**/.stryker-tmp/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

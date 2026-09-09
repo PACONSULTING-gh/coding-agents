@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Plataforma de coordinación — arquitectura de la Fase 1",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/PACONSULTING-gh/coding-agents",
+      "revision": "af0aa753ef8c23c1ebd2fde9900e8e12b6f4c7cc"
+    }
+  },
+  "components": [
+    {
+      "id": "github",
+      "type": "external",
+      "label": "GitHub",
+      "sublabel": "GitHub App",
+      "pos": [40, 70],
+      "size": [160, 64],
+      "sources": [
+        {
+          "path": "packages/github/src/verify-signature.ts",
+          "label": "verificacion HMAC"
+        }
+      ]
+    },
+    {
+      "id": "webhook",
+      "type": "backend",
+      "label": "apps/webhook",
+      "sublabel": "Fastify",
+      "pos": [320, 70],
+      "size": [160, 64],
+      "sources": [
+        {
+          "path": "apps/webhook/src/server.ts",
+          "label": "listener"
+        }
+      ]
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "packages/queue",
+      "sublabel": "pg-boss",
+      "pos": [600, 70],
+      "size": [160, 64],
+      "sources": [
+        {
+          "path": "packages/queue/src/pg-boss-queue.ts",
+          "label": "QueuePort sobre pg-boss"
+        }
+      ]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "apps/worker",
+      "sublabel": "handlers",
+      "pos": [880, 70],
+      "size": [160, 64],
+      "sources": [
+        {
+          "path": "apps/worker/src/index.ts",
+          "label": "raiz de composicion"
+        }
+      ]
+    },
+    {
+      "id": "graph",
+      "type": "backend",
+      "label": "packages/graph",
+      "sublabel": "grafo + claims",
+      "pos": [880, 300],
+      "size": [170, 64],
+      "sources": [
+        {
+          "path": "packages/graph/src/queries.ts",
+          "label": "CTEs recursivas"
+        },
+        {
+          "path": "packages/graph/src/claims.ts",
+          "label": "claims con TTL"
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "servidor MCP",
+      "sublabel": "5 herramientas",
+      "pos": [880, 530],
+      "size": [170, 64],
+      "sources": [
+        {
+          "path": "packages/graph/src/mcp/server.ts",
+          "label": "servidor stdio"
+        }
+      ]
+    },
+    {
+      "id": "agents",
+      "type": "external",
+      "label": "Agentes de código",
+      "sublabel": "Claude Code · Codex",
+      "pos": [1150, 530],
+      "size": [170, 64]
+    },
+    {
+      "id": "core",
+      "type": "backend",
+      "label": "packages/core",
+      "sublabel": "dominio · puertos",
+      "pos": [1150, 300],
+      "size": [170, 64],
+      "sources": [
+        {
+          "path": "packages/core/src/tenant.ts",
+          "label": "AsyncLocalStorage"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "backend",
+      "label": "packages/db",
+      "sublabel": "capa con RLS",
+      "pos": [600, 300],
+      "size": [160, 64],
+      "sources": [
+        {
+          "path": "packages/db/src/client.ts",
+          "label": "withTenantConnection"
+        }
+      ]
+    },
+    {
+      "id": "pgbouncer",
+      "type": "backend",
+      "label": "PgBouncer",
+      "sublabel": "modo transacción",
+      "pos": [320, 300],
+      "size": [160, 64],
+      "sources": [
+        {
+          "path": "infra/docker-compose.yml",
+          "label": "POOL_MODE=transaction"
+        }
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "Postgres 16",
+      "sublabel": "dominio · cola · grafo",
+      "pos": [40, 300],
+      "size": [160, 64],
+      "sources": [
+        {
+          "path": "packages/db/migrations/0003_row_level_security.sql",
+          "label": "FORCE ROW LEVEL SECURITY"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Aislamiento por tenant — RLS FORZADA",
+      "wraps": ["db", "pgbouncer", "postgres"],
+      "pad": 24
+    }
+  ],
+  "connections": [
+    {
+      "from": "github",
+      "to": "webhook",
+      "label": "webhook firmado",
+      "variant": "emphasis"
+    },
+    {
+      "from": "webhook",
+      "to": "queue",
+      "label": "encola"
+    },
+    {
+      "from": "queue",
+      "to": "worker",
+      "label": "una sola vez"
+    },
+    {
+      "from": "worker",
+      "to": "graph",
+      "label": "ingesta incremental",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "graph",
+      "to": "mcp",
+      "label": "expone",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 40
+    },
+    {
+      "from": "mcp",
+      "to": "agents",
+      "label": "consulta",
+      "variant": "emphasis"
+    },
+    {
+      "from": "graph",
+      "to": "core",
+      "label": "dominio",
+      "variant": "dashed"
+    },
+    {
+      "from": "graph",
+      "to": "db",
+      "label": "acceso con tenant"
+    },
+    {
+      "from": "db",
+      "to": "pgbouncer",
+      "label": "SET LOCAL"
+    },
+    {
+      "from": "pgbouncer",
+      "to": "postgres",
+      "label": "pool de 20"
+    },
+    {
+      "from": "queue",
+      "to": "postgres",
+      "label": "directo: LISTEN/NOTIFY",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Detalles que se rompen si se tocan",
+      "items": [
+        "El HMAC se calcula sobre el cuerpo CRUDO: reserializar el JSON invalida la firma",
+        "El contexto de tenant es LOCAL a la transacción; un SET de sesión se filtra entre tenants bajo PgBouncer",
+        "pg-boss NO pasa por PgBouncer: usa LISTEN/NOTIFY, que el modo transacción rompe"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Medido, no estimado",
+      "items": [
+        "Webhook válido: 2XX en 19 ms (presupuesto 500 ms)",
+        "blast_radius sobre tenant.ts: 28 afectados en 5 paquetes",
+        "Dependencias inversas: p95 6,1 ms a profundidad 4 con 12.000 nodos"
+      ]
+    }
+  ]
+}
