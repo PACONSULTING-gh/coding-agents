@@ -61,4 +61,9 @@ export type {
 } from './installations.js'
 
 export { publishPullRequestComment } from './pull-request-comments.js'
+export {
+  GitHubEscalationNotifier,
+  renderEscalationComment,
+  type EscalationTarget,
+} from './escalation-notification.js'
 export type { PullRequestCommentTarget, PublishedComment } from './pull-request-comments.js'

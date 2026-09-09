@@ -135,19 +135,55 @@ veredicto global binario. Publicado como comentario del PR.
 ### T06 — Flujo de fallo y ambigüedad
 **Paralelizable:** no
 **Depende de:** T05
-**Toca:** `packages/core/`, `apps/worker/`
+**Toca:** `packages/core/`, `packages/db/`, `packages/github/`, `apps/worker/`
+**Diseño:** `docs/adr/0008-flujo-de-fallo-y-ambiguedad.md`
 
-Qué pasa cuando el gate falla o el veredicto es ambiguo: quién recibe el aviso,
-si se reasigna o se devuelve al mismo agente, cuántos reintentos antes de
-escalar a humano, y cómo se re-verifica.
+**Esta tarea estaba mal planteada** y por eso llevaba meses sin diseñarse: daba
+por hecho que hay *un* flujo de fallo. No lo hay. Hay **cuatro modos que
+significan cosas distintas**, y tratarlos igual obliga a elegir un
+comportamiento que está mal para tres de ellos.
+
+| Modo | Destino | ¿Gasta intento? |
+|---|---|---|
+| `gate_failed` — el gate determinista falló, no hay ni informe | Mismo agente | Sí |
+| `verifier_fail` — `no_apto` con al menos un FAIL citado | Mismo agente | Sí |
+| `verifier_no_evidence` — `no_apto` sin FAIL y con SIN_EVIDENCIA | Mismo agente la 1.ª vez; **fase de criterios** si se repite en el mismo criterio | Sí |
+| `verifier_unavailable` — el Verifier no pudo emitir veredicto | **Humano, directamente** | **No** |
+
+Lo decidido (el porqué de cada punto está en el ADR):
+
+1. **Dos intentos en total**, no tres. Si el segundo no ve el problema con el
+   informe delante, el tercero tampoco.
+2. **Un fallo de infraestructura no gasta intento.** No es hipotético: hoy
+   `claude-opus-5` rechaza la petición del Verifier (issue #27).
+3. **El contador de SIN_EVIDENCIA es por criterio**, no por tarea. Dos criterios
+   distintos fallando una vez cada uno no son un spec ambiguo.
+4. **El responsable sale de una cadena** —holder del claim → assignee del issue →
+   nadie— y el "nadie" **se dice en voz alta** en vez de elegir a alguien
+   plausible.
+5. **El aviso sale por un `NotificationPort`**, con un adaptador que comenta en
+   el issue mencionando al responsable. El canal definitivo depende de la
+   decisión 3 del índice (epic 04 T05), que sigue abierta.
+6. **La re-verificación es limpia:** al Verifier se le da el diff nuevo y NUNCA
+   el informe anterior —sería el "razonamiento del que codeó" con otro nombre—.
+   Al agente sí se le da entero.
+7. **El estado vive en la tabla `verification_flow`**; el `audit_log` guarda el
+   histórico.
 
 **Criterios de aceptación:**
 - Dado un fallo de verificación, cuando ocurre, entonces existe un responsable
   asignado y notificado.
+- Dado que no se puede identificar ningún responsable, cuando se notifica,
+  entonces el aviso lo dice explícitamente en vez de elegir a alguien.
 - Dado un reintento, cuando ocurre, entonces está acotado a N intentos y después
   escala a humano.
-- Dado un veredicto SIN_EVIDENCIA reiterado, cuando ocurre, entonces se trata
-  como señal de spec ambiguo y se devuelve a la fase de criterios, no al agente.
+- Dado un fallo que impide al Verifier emitir veredicto, cuando ocurre, entonces
+  escala a un humano y **no** consume ningún intento del agente.
+- Dado un veredicto SIN_EVIDENCIA reiterado sobre el MISMO criterio, cuando
+  ocurre, entonces se revoca la aprobación de los criterios y la tarea vuelve a
+  la fase de criterios, no al agente.
+- Dado un reintento, cuando se re-verifica, entonces el Verifier no recibe el
+  informe del intento anterior.
 
 ---
 

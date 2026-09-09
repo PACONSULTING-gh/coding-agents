@@ -216,6 +216,18 @@ async function seedTenant(client: Client, slug: string): Promise<TenantFixture> 
       // el aislamiento, no la caducidad (eso esta en acceptance-criteria.test.ts).
       [id, 'f'.repeat(64), userIds[0]],
     )
+
+    // Estado del flujo de verificacion (migracion 0011). Mismo `task_ref` en
+    // los dos fixtures, por el mismo motivo: la unicidad es por tenant, y si el
+    // aislamiento dependiera de que las claves no chocan, esto reventaria en
+    // vez de pasar por casualidad. Este estado dice que tareas de un cliente
+    // estan atascadas y en manos de quien: no cruza la frontera.
+    await client.query(
+      `INSERT INTO verification_flow
+         (tenant_id, task_ref, attempts, state, last_outcome, responsible)
+       VALUES ($1, '15', 1, 'same_agent', 'verifier_fail', $2)`,
+      [id, JSON.stringify({ kind: 'agent', id: `agente-${slug}`, label: `Agente ${slug}` })],
+    )
   })
 
   return { id, slug, userIds, teamId, skillId, installationId }
