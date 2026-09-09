@@ -104,16 +104,24 @@ export function githubAppConfigFromEnv(env: NodeJS.ProcessEnv = process.env): Gi
  * No se pasan las credenciales de OAuth: este servicio no actua nunca en
  * nombre de un usuario. El dia que haga falta (login con GitHub), se anaden
  * aqui y no en otro sitio.
+ *
+ * SIEMPRE se pasa `Octokit` (el de el paquete `octokit`, con `.rest.*` y el
+ * resto de plugins), y no solo cuando hay `baseUrl` de test. `@octokit/app`
+ * usa `@octokit/core` PELADO como valor por defecto cuando no se le da un
+ * `Octokit` — sin `.rest` — y hasta T05 (epic 05) nada de este repositorio
+ * necesitaba `.rest.*`, asi que el hueco no se habia notado: el cliente de
+ * produccion (sin `baseUrl`) se estaba quedando SIN los metodos REST. Se
+ * detecto al escribir `pull-request-comments.ts`, que si los necesita, y es un
+ * fallo real de produccion, no solo de tipos: se corrige aqui para todo el
+ * mundo, no con un cast local en el llamante.
  */
-export function createGitHubApp(config: GitHubAppConfig): App {
+export function createGitHubApp(config: GitHubAppConfig): App<{ Octokit: typeof Octokit }> {
   return new App({
     appId: config.appId,
     privateKey: config.privateKey,
     webhooks: { secret: config.webhookSecret },
     // `baseUrl` solo se usa en tests, contra un servidor HTTP local que hace de
     // doble de la API de GitHub. En produccion se omite y vale api.github.com.
-    ...(config.baseUrl === undefined
-      ? {}
-      : { Octokit: Octokit.defaults({ baseUrl: config.baseUrl }) }),
+    Octokit: config.baseUrl === undefined ? Octokit : Octokit.defaults({ baseUrl: config.baseUrl }),
   })
 }

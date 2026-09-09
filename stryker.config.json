@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "_comment": "Mutation testing solo sobre modulos criticos (docs/quality-gates.md T06): correrlo sobre todo el repo seria lentisimo y es exactamente el ruido que CLAUDE.md 2.4 quiere evitar. Se amplia la lista segun se estabilicen mas modulos.",
   "mutate_graph_comment": "packages/graph NO esta en la lista, y NO es un olvido: hoy no se puede medir de forma honesta. Se probo (`stryker run --mutate packages/graph/src/parse/python.ts`): 291 mutantes, de los que 230 (79%) son ESTATICOS —los modulos del paquete exportan objetos de nivel superior, asi que Stryker tiene que re-ejecutar la suite ENTERA por mutante en vez de solo los tests que lo cubren—, y cada re-ejecucion levanta un Postgres con testcontainers. Resultado real: 0 mutantes MUERTOS, 229 TIMEOUT, 1 superviviente, 'Ran 0.00 tests per mutant on average', y una puntuacion de 78,69 que supera el break=60 SIN QUE NINGUN TEST HAYA MATADO NADA. Un umbral superado por timeouts es exactamente el 'se supera de forma vacia' que ya saco de esta lista a packages/queue/src/index.ts: es peor que no medir, porque parece que se mide. Lo que lo desbloquea es que los modulos con DECISIONES de este paquete (parse/*, ingest/ingest.ts, queries.ts, claims.ts) tengan tests que NO levanten contenedor —un contenedor compartido por `globalSetup`, o tests unitarios de la parte pura—, y eso es una refactorizacion de los 13 ficheros de test del paquete: decision humana, no un cambio de configuracion. Registrado en docs/runbook.md.",
-  "mutate_comment": "Cada fichero de la lista contiene DECISIONES que un agente podria debilitar sin que los tests se enteren: la validacion de la frontera de confianza (verify-signature, envelope), el mapeo de opciones y el enrutado a la cola de fallidos (pg-boss-queue), la fijacion del contexto de tenant (tenant, client). Un barril de re-exports NO vale como objetivo: Stryker no muta especificadores de modulo, asi que generaria cero mutantes y el umbral se 'superaria' de forma vacia. Por eso packages/queue/src/index.ts salio de esta lista.",
+  "mutate_comment": "Cada fichero de la lista contiene DECISIONES que un agente podria debilitar sin que los tests se enteren: la validacion de la frontera de confianza (verify-signature, envelope), el mapeo de opciones y el enrutado a la cola de fallidos (pg-boss-queue), la fijacion del contexto de tenant (tenant, client), y las dos decisiones de T05 (report: la regla del veredicto binario apto/no_apto; report-render: que se trunca y que no se trunca NUNCA). Los dos de packages/agents entran porque sus tests son PUROS y no levantan contenedor, asi que no reproducen el problema medido con packages/graph: medido, 7 segundos y puntuacion 76,96 sobre break=60. Un barril de re-exports NO vale como objetivo: Stryker no muta especificadores de modulo, asi que generaria cero mutantes y el umbral se 'superaria' de forma vacia. Por eso packages/queue/src/index.ts salio de esta lista.",
   "thresholds_comment": "break=60: umbral inicial honesto, no aspiracional. Sube con el tiempo segun se endurezca cada modulo (ver docs/quality-gates.md, seccion 2, capa 2: la fila de mutation testing). Ojo: `thresholds` NO admite propiedades extra en el esquema de Stryker 10; un comentario dentro de ese objeto aborta la ejecucion entera antes de generar un solo mutante. Por eso los comentarios viven en la raiz.",
   "packageManager": "pnpm",
   "testRunner": "vitest",
@@ -15,7 +15,9 @@
     "packages/db/src/client.ts",
     "packages/queue/src/envelope.ts",
     "packages/queue/src/pg-boss-queue.ts",
-    "packages/github/src/verify-signature.ts"
+    "packages/github/src/verify-signature.ts",
+    "packages/agents/src/verification/report.ts",
+    "packages/agents/src/verification/report-render.ts"
   ],
   "thresholds": {
     "high": 80,

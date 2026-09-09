@@ -10,6 +10,7 @@
       "@coord/db": ["packages/db/src/index.ts"],
       "@coord/db/migrate": ["packages/db/src/migrate.ts"],
       "@coord/graph": ["packages/graph/src/index.ts"],
+      "@coord/agents": ["packages/agents/src/index.ts"],
       "@coord/queue": ["packages/queue/src/index.ts"],
       "@coord/github": ["packages/github/src/index.ts"]
     }
