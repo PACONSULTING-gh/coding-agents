@@ -5,7 +5,13 @@
  * Contiene:
  *
  *   * `anthropic.ts` — el adaptador de `LlmPort`
- *     (`packages/core/src/ports/llm.ts`) sobre `@anthropic-ai/sdk` (T01).
+ *     (`packages/core/src/ports/llm.ts`) sobre `@anthropic-ai/sdk`. Es la ruta
+ *     de PRODUCCION: el PRD §5 manda las llamadas de la plataforma (router y
+ *     Verifier) por API de pago por token.
+ *   * `claude-cli.ts` — el mismo `LlmPort` sobre el CLI de Claude Code, para
+ *     MEDIR sobre una suscripcion ya pagada. NO es la ruta de produccion: su
+ *     aislamiento es una lista negra de herramientas y no una propiedad del
+ *     transporte. Lee su cabecera antes de usarlo.
  *   * `verification/test-generator.ts` — T02: los tests los escribe un agente
  *     distinto al que implementa, a partir de los criterios y NUNCA del codigo.
  *   * `verification/test-manifest.ts` — T02: manifiesto firmado del arbol de
@@ -44,6 +50,7 @@
  * comprobacion y llamase a `process.exit`.
  */
 export * from './anthropic.js'
+export * from './claude-cli.js'
 export * from './verification/test-manifest.js'
 export * from './verification/test-generator.js'
 export * from './verification/generated-tests-fs.js'
