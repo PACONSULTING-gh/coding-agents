@@ -199,5 +199,7 @@ export const DOMAIN_TABLES = [
   'graph_files',
   'graph_ingestions',
   'claims',
+  'acceptance_criteria',
+  'acceptance_criteria_approvals',
 ] as const
 export type DomainTable = (typeof DOMAIN_TABLES)[number]

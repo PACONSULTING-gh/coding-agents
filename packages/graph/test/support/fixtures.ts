@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { runWithTenant } from '@coord/core'
-import { withTenantConnection } from '@coord/db'
+import { approveCriteria, setCriteria, withTenantConnection } from '@coord/db'
 
 import type { EdgeKind, EdgeSource } from '../../src/queries.js'
 
@@ -123,4 +123,41 @@ export function percentile(samples: readonly number[], p: number): number {
     throw new Error(`Indice de percentil fuera de rango: ${String(index)}`)
   }
   return value
+}
+
+/**
+ * Deja una tarea lista para poder ser reclamada: le escribe criterios de
+ * aceptacion y hace que un humano los apruebe.
+ *
+ * Existe porque T01 del epic 05 metio una puerta nueva delante de `claim()`:
+ * un issue sin criterios aprobados NO se puede reclamar. Los tests de T04
+ * (epic 02) reclaman issues para probar otras cosas —la carrera, la caducidad,
+ * los advisory locks— y necesitan pasar esa puerta antes de llegar a lo suyo.
+ *
+ * El aprobador es un `users` de verdad del tenant: la clave ajena compuesta de
+ * la migracion 0010 no admite un id inventado.
+ */
+export async function approveIssueCriteria(
+  tenantId: string,
+  issueKeys: readonly string[],
+): Promise<void> {
+  const approver = await createUser(tenantId, {
+    email: `aprobador-${randomUUID()}@example.test`,
+    displayName: 'Aprobador humano',
+  })
+  for (const key of issueKeys) {
+    await runWithTenant({ tenantId, actorId: approver }, async () => {
+      await setCriteria({
+        taskRef: key,
+        criteria: [
+          {
+            given: `el issue #${key} con criterios escritos`,
+            when: 'un agente intenta reclamarlo',
+            then: `el claim se concede y aparece en \`activeClaims\` para el issue ${key}`,
+          },
+        ],
+      })
+      await approveCriteria({ taskRef: key })
+    })
+  }
 }

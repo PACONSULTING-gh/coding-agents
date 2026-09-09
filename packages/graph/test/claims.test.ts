@@ -28,7 +28,12 @@ import {
 } from '../src/claims.js'
 
 import { startDatabase, type StartedDatabase } from './support/database.js'
-import { createEdges, createFileNodes, createTenant } from './support/fixtures.js'
+import {
+  approveIssueCriteria,
+  createEdges,
+  createFileNodes,
+  createTenant,
+} from './support/fixtures.js'
 
 /**
  * Criterios de aceptacion de T04 (epic 02), contra Postgres DE VERDAD. Nada
@@ -121,6 +126,12 @@ describe('1. carrera: dos (o diez) intentos simultaneos y solo uno gana', () => 
   beforeAll(async () => {
     tenantId = await createTenant('carrera')
     repoId = randomUUID()
+    // T01 del epic 05: un issue sin criterios aprobados no se puede reclamar.
+    // Estos tests van de otra cosa (la carrera), asi que se abre la puerta y ya.
+    await approveIssueCriteria(
+      tenantId,
+      Array.from({ length: 5 }, (_unused, index) => String(1001 + index)),
+    )
   })
 
   /**
@@ -198,6 +209,7 @@ describe('1. carrera: dos (o diez) intentos simultaneos y solo uno gana', () => 
 
   it('otro tenant puede reclamar el mismo issue del mismo repo', async () => {
     const otroTenant = await createTenant('carrera-vecina')
+    await approveIssueCriteria(otroTenant, ['1001'])
     const ana = actor('Ana')
     const lease = await as(otroTenant, ana, () =>
       claim({
@@ -224,6 +236,7 @@ describe('2. caducidad: el claim se libera solo, sin que corra ninguna purga', (
   beforeAll(async () => {
     tenantId = await createTenant('caducidad')
     repoId = randomUUID()
+    await approveIssueCriteria(tenantId, ['77', '78', '79', '80'])
   })
 
   it('tras vencer el TTL otro puede reclamarlo, y la fila vieja sigue en la tabla', async () => {
@@ -350,6 +363,7 @@ describe('3. solape de ficheros: quien lo tiene y desde cuando', () => {
   beforeAll(async () => {
     tenantId = await createTenant('solape')
     repoId = randomUUID()
+    await approveIssueCriteria(tenantId, ['200', '201'])
     ana = actor('Ana Perez')
     bruno = actor('Bruno Diaz')
 
@@ -494,6 +508,10 @@ describe('4. pg_locks: no queda ningun advisory lock retenido entre transaccione
   beforeAll(async () => {
     tenantId = await createTenant('locks')
     repoId = randomUUID()
+    await approveIssueCriteria(
+      tenantId,
+      Array.from({ length: 100 }, (_unused, index) => String(500 + index)),
+    )
   })
 
   it('el contador de pg_locks sabe ver un advisory lock en vuelo (control)', async () => {
@@ -575,6 +593,7 @@ describe('5. renovacion: el dueno si, otro no', () => {
   beforeAll(async () => {
     tenantId = await createTenant('renovacion')
     repoId = randomUUID()
+    await approveIssueCriteria(tenantId, ['300', '301', '302', '303', '304'])
     ana = actor('Ana Perez')
     bruno = actor('Bruno Diaz')
   })
@@ -664,6 +683,9 @@ describe('6. fronteras de confianza y programacion de la purga', () => {
   beforeAll(async () => {
     tenantId = await createTenant('fronteras')
     repoId = randomUUID()
+    // Solo el '81', que es el unico claim de este bloque que llega a la base de
+    // datos: los demas se rechazan por validacion antes de tocarla.
+    await approveIssueCriteria(tenantId, ['81'])
     ana = actor('Ana Perez')
   })
 
