@@ -220,3 +220,164 @@ describe('aislamiento entre tenants', () => {
     expect(suyo.row.attempts).toBe(1)
   })
 })
+
+describe('la frontera de entrada: lo que no cuadra no se escribe', () => {
+  it('un SHA que no es un sha se rechaza en vez de guardarse', async () => {
+    // Guardar cualquier cosa aqui haria que el aviso citara un commit que no
+    // existe, y quien lo leyera iria a buscar codigo que nadie escribio.
+    for (const headSha of ['no-es-un-sha', 'a'.repeat(39), 'a'.repeat(41), 'A'.repeat(40)]) {
+      await expect(
+        runWithTenant({ tenantId }, () =>
+          recordVerificationOutcome({ taskRef: 'issue-1', outcome: 'gate_failed', headSha }),
+        ),
+      ).rejects.toThrow()
+    }
+  })
+
+  it('un responsable sin id o sin nombre legible se rechaza', async () => {
+    // Sin `label` no se le puede nombrar en el aviso, y un `id` en blanco no
+    // identifica a nadie: seria un responsable de mentira.
+    for (const responsible of [
+      { kind: 'user' as const, id: '   ', label: 'Javier' },
+      { kind: 'user' as const, id: 'u-1', label: '' },
+    ]) {
+      await expect(
+        runWithTenant({ tenantId }, () =>
+          recordVerificationOutcome({
+            taskRef: 'issue-1',
+            outcome: 'gate_failed',
+            responsible,
+          }),
+        ),
+      ).rejects.toThrow()
+    }
+  })
+
+  it('un tope de cero intentos se rechaza', async () => {
+    await expect(
+      runWithTenant({ tenantId }, () =>
+        recordVerificationOutcome({
+          taskRef: 'issue-1',
+          outcome: 'gate_failed',
+          maxAttempts: 0,
+        }),
+      ),
+    ).rejects.toThrow()
+  })
+})
+
+describe('el tope de intentos se puede ajustar por llamada', () => {
+  it('con maxAttempts 1, el primer fallo ya escala', async () => {
+    // El tope viaja hasta la regla. Si el paso se perdiera, se usaria siempre
+    // el de por defecto y una politica sin segunda oportunidad no existiria.
+    const taskRef = `issue-${String(Math.floor(Math.random() * 100_000))}`
+
+    const { row } = await runWithTenant({ tenantId }, () =>
+      recordVerificationOutcome({ taskRef, outcome: 'verifier_fail', maxAttempts: 1 }),
+    )
+
+    expect(row.attempts).toBe(1)
+    expect(row.state).toBe('human')
+  })
+})
+
+describe('sin responsable, la columna queda vacia', () => {
+  it('no se escribe un JSON con undefined dentro', async () => {
+    // La alternativa —guardar algo cuando no hay nada— haria que el aviso
+    // creyera tener destinatario y no lo dijera en voz alta.
+    const taskRef = `issue-${String(Math.floor(Math.random() * 100_000))}`
+
+    const { row } = await runWithTenant({ tenantId }, () =>
+      recordVerificationOutcome({ taskRef, outcome: 'gate_failed' }),
+    )
+
+    expect(row.responsible).toBeUndefined()
+    const [fila] = (
+      await runWithTenant({ tenantId }, () =>
+        withTenantConnection((tx) =>
+          tx.query<{ responsible: unknown }>(
+            'SELECT responsible FROM verification_flow WHERE task_ref = $1',
+            [taskRef],
+          ),
+        ),
+      )
+    ).rows
+    expect(fila?.responsible).toBeNull()
+  })
+})
+
+describe('el camino feliz tambien se persiste', () => {
+  it('un `passed` deja la tarea en done sin gastar intento', async () => {
+    // No estaba probado en esta capa: se probaba todo lo que falla y nada de lo
+    // que sale bien, que es el estado en el que acaba la mayoria de las tareas.
+    const taskRef = `issue-${String(Math.floor(Math.random() * 100_000))}`
+
+    await runWithTenant({ tenantId }, () =>
+      recordVerificationOutcome({ taskRef, outcome: 'verifier_fail' }),
+    )
+    const { row } = await runWithTenant({ tenantId }, () =>
+      recordVerificationOutcome({ taskRef, outcome: 'passed', headSha: 'd'.repeat(40) }),
+    )
+
+    expect(row.state).toBe('done')
+    expect(row.lastOutcome).toBe('passed')
+    // El intento que gasto el fallo anterior no se borra: el historico de lo
+    // que costo llegar aqui es informacion.
+    expect(row.attempts).toBe(1)
+  })
+})
+
+describe('lo que queda escrito en el audit_log', () => {
+  /**
+   * El log es lo que se lee meses despues, cuando ya no queda nadie que
+   * recuerde por que escalo aquella tarea. Su contenido es contrato.
+   */
+  it('sin datos opcionales, no se inventan claves', async () => {
+    const taskRef = `issue-${String(Math.floor(Math.random() * 100_000))}`
+
+    await runWithTenant({ tenantId }, () =>
+      recordVerificationOutcome({ taskRef, outcome: 'gate_failed' }),
+    )
+
+    const page = await runWithTenant({ tenantId }, () =>
+      withTenantConnection((tx) => readAuditLog(tx, { actions: [VERIFICATION_FLOW_ACTION] })),
+    )
+    const entrada = page.entries.find((row) => row.resourceId === taskRef)
+
+    expect(Object.keys(entrada?.metadata ?? {}).sort()).toEqual([
+      'attemptsAfter',
+      'attemptsBefore',
+      'consumesAttempt',
+      'destination',
+      'notifiesHuman',
+      'outcome',
+      'reason',
+      'revokesCriteriaApproval',
+    ])
+  })
+
+  it('con SHA y responsable, los dos quedan registrados', async () => {
+    const taskRef = `issue-${String(Math.floor(Math.random() * 100_000))}`
+
+    await runWithTenant({ tenantId }, () =>
+      recordVerificationOutcome({
+        taskRef,
+        outcome: 'gate_failed',
+        headSha: 'e'.repeat(40),
+        responsible: { kind: 'agent', id: 'a-1', label: 'Agente 1' },
+      }),
+    )
+
+    const page = await runWithTenant({ tenantId }, () =>
+      withTenantConnection((tx) => readAuditLog(tx, { actions: [VERIFICATION_FLOW_ACTION] })),
+    )
+    const entrada = page.entries.find((row) => row.resourceId === taskRef)
+
+    expect(entrada?.metadata['headSha']).toBe('e'.repeat(40))
+    expect(entrada?.metadata['responsible']).toEqual({
+      kind: 'agent',
+      id: 'a-1',
+      label: 'Agente 1',
+    })
+  })
+})
