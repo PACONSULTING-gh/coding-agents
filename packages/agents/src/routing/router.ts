@@ -1,11 +1,11 @@
 import type { LlmEffort, LlmMessage, LlmPort, LlmTextBlock } from '@coord/core'
 
 import {
+  LEADING_SIGNALS,
   MAX_CANDIDATES,
   MIN_CANDIDATES,
   MIN_ROUTING_REASONING_LENGTH,
   parseRoutingSuggestion,
-  ROUTING_OUTPUT_SCHEMA,
   type RoutingInput,
   type RoutingSuggestion,
 } from './shortlist.js'
@@ -108,6 +108,65 @@ const ROLE_PROMPT: string = [
   'criterio sin abrir el codigo.',
   `Un razonamiento de menos de ${String(MIN_ROUTING_REASONING_LENGTH)} caracteres se rechaza.`,
 ].join('\n')
+
+/**
+ * El esquema al que se le pide al modelo que se ciña.
+ *
+ * Vive aqui, con el prompt, y no con la validacion: es parte de lo que se le
+ * PIDE al modelo, no de la defensa contra lo que responda. `shortlist.ts` tiene
+ * que poder validar una respuesta venga de donde venga, incluso de un proveedor
+ * que no acepte esquemas. (Es tambien donde lo tienen el Verifier y el
+ * generador de tests.)
+ *
+ * Pedir salida estructurada NO exime de validar: lo que vuelve sigue siendo
+ * texto generado por un modelo.
+ */
+export const ROUTING_OUTPUT_SCHEMA: Readonly<Record<string, unknown>> = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['outcome'],
+  properties: {
+    outcome: {
+      type: 'string',
+      enum: ['shortlist', 'no_match'],
+      description: 'Usa `no_match` si ningun candidato encaja. Es una respuesta valida.',
+    },
+    noMatchReason: {
+      type: 'string',
+      description: 'Obligatorio con `no_match`: por que ninguno encaja.',
+    },
+    candidates: {
+      type: 'array',
+      description: `Entre ${String(MIN_CANDIDATES)} y ${String(MAX_CANDIDATES)} candidatos con \`shortlist\`.`,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        // El orden de las claves es el orden de generacion: primero el
+        // razonamiento, despues la evidencia, y el puesto AL FINAL. Es
+        // deliberado, igual que en el Verifier: si el puesto se generase
+        // primero, el razonamiento seria una justificacion a posteriori.
+        required: ['candidateId', 'reasoning', 'evidenceFiles', 'leadingSignal', 'rank'],
+        properties: {
+          candidateId: {
+            type: 'string',
+            description: 'Id EXACTO de la lista dada. No lo inventes.',
+          },
+          reasoning: {
+            type: 'string',
+            description: 'Por que este candidato, antes de decidir su puesto.',
+          },
+          evidenceFiles: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Rutas EXACTAS de los ficheros que sostienen la sugerencia.',
+          },
+          leadingSignal: { type: 'string', enum: [...LEADING_SIGNALS] },
+          rank: { type: 'number', description: '1 es el mas recomendado.' },
+        },
+      },
+    },
+  },
+}
 
 export interface SuggestAssigneesOptions {
   readonly model?: string

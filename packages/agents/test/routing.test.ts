@@ -5,6 +5,7 @@ import { AnthropicLlm } from '../src/anthropic.js'
 import {
   ROUTER_EFFORT,
   ROUTER_MODEL,
+  ROUTING_OUTPUT_SCHEMA,
   suggestAssignees,
   taskMessage,
 } from '../src/routing/router.js'
@@ -92,6 +93,39 @@ const ENTRADA: RoutingInput = {
 
 const RAZON = 'Escribio la mayor parte de la logica de reintento que esta tarea toca.'
 
+/**
+ * Cinco candidatos DE VERDAD, para poder probar el limite de tamaño del
+ * shortlist sin que salte antes otra comprobacion.
+ *
+ * Existe porque el mutation testing encontro que no: la primera version de esos
+ * dos tests inventaba ids (`p1`..`p5`) que no estaban entre los candidatos, asi
+ * que pasaban por la comprobacion de "persona inventada" y NO por la del
+ * tamaño. Verdes los dos, y ninguno probaba lo que decia su nombre.
+ */
+const ENTRADA_ANCHA: RoutingInput = {
+  ...ENTRADA,
+  candidates: ['ana', 'bruno', 'carla', 'diego', 'elena'].map((id) => ({
+    id,
+    label: id,
+    ownership: [{ path: 'packages/billing/src/retry.ts', lines: 100, commits: 2 }],
+    workload: 1,
+    workloadIsComplete: true,
+  })),
+}
+
+/** Un shortlist de `cuantos` candidatos de `ENTRADA_ANCHA`, bien formado. */
+function shortlistDe(cuantos: number): Crudo {
+  return shortlistCrudo(
+    ENTRADA_ANCHA.candidates.slice(0, cuantos).map((candidato, indice) => ({
+      candidateId: candidato.id,
+      reasoning: RAZON,
+      evidenceFiles: ['packages/billing/src/retry.ts'],
+      leadingSignal: 'ownership',
+      rank: indice + 1,
+    })),
+  )
+}
+
 type Crudo = Record<string, unknown>
 
 function shortlistCrudo(candidates: readonly Crudo[]): Crudo {
@@ -163,6 +197,40 @@ describe('el shortlist que llega del modelo', () => {
     expect(() => parseRoutingSuggestion(crudo, ENTRADA)).toThrow(/pagos\.ts/)
   })
 
+  it('rechaza una entrada que no cita ningun fichero', () => {
+    // El otro lado de la evidencia inventada: si no citas nada, no hay nada que
+    // comprobar. La entrada llega sin la clave siquiera.
+    const crudo = shortlistCrudo([{ ...ANA, evidenceFiles: undefined }, CARLA])
+    expect(() => parseRoutingSuggestion(crudo, ENTRADA)).toThrow(/sin citar ningun fichero/)
+  })
+
+  it('normaliza los espacios de lo que llega, en vez de rechazarlo por un espacio', () => {
+    // Un id o una ruta con espacios de mas es un descuido de formato, no una
+    // mentira: rechazarlo seria tirar una respuesta correcta por la sangria.
+    const crudo = shortlistCrudo([
+      { ...ANA, candidateId: '  ana  ', evidenceFiles: ['  packages/billing/src/retry.ts  '] },
+      CARLA,
+    ])
+    const sugerencia = parseRoutingSuggestion(crudo, ENTRADA)
+    if (sugerencia.kind !== 'shortlist') throw new Error('no era un shortlist')
+    expect(sugerencia.entries[0]?.candidateId).toBe('ana')
+  })
+
+  it('no vuelca el error entero de zod en el mensaje', () => {
+    // Este mensaje acaba en un log y puede acabar en un comentario de PR. El
+    // error de zod sobre veinte entradas rotas ocupa miles de caracteres.
+    const roto = shortlistCrudo(Array.from({ length: 20 }, () => ({ candidateId: 42 })))
+    const error = (() => {
+      try {
+        parseRoutingSuggestion(roto, ENTRADA)
+      } catch (caught: unknown) {
+        return caught as Error
+      }
+      throw new Error('deberia haber lanzado')
+    })()
+    expect(error.message.length).toBeLessThan(400)
+  })
+
   it('rechaza al mismo candidato dos veces', () => {
     const crudo = shortlistCrudo([ANA, { ...ANA, rank: 2 }])
     expect(() => parseRoutingSuggestion(crudo, ENTRADA)).toThrow(/repitio/)
@@ -170,7 +238,39 @@ describe('el shortlist que llega del modelo', () => {
 
   it('rechaza un razonamiento demasiado corto para poder anularlo con criterio', () => {
     const crudo = shortlistCrudo([{ ...ANA, reasoning: 'Encaja bien.' }, CARLA])
-    expect(() => parseRoutingSuggestion(crudo, ENTRADA)).toThrow(ValidationError)
+    // El mensaje dice cuanto trajo y cuanto hace falta: un error que no dice
+    // eso obliga a abrir el codigo para entenderlo.
+    expect(() => parseRoutingSuggestion(crudo, ENTRADA)).toThrow(/tiene 12 caracteres/)
+  })
+
+  it('acepta un razonamiento de exactamente el minimo, y rechaza el de uno menos', () => {
+    const justo = 'x'.repeat(MIN_ROUTING_REASONING_LENGTH)
+    expect(() =>
+      parseRoutingSuggestion(shortlistCrudo([{ ...ANA, reasoning: justo }, CARLA]), ENTRADA),
+    ).not.toThrow()
+    expect(() =>
+      parseRoutingSuggestion(
+        shortlistCrudo([{ ...ANA, reasoning: justo.slice(1) }, CARLA]),
+        ENTRADA,
+      ),
+    ).toThrow(ValidationError)
+  })
+
+  it('el relleno no cuenta como razonamiento, y no se guarda', () => {
+    // Un razonamiento de dos palabras con doscientos espacios detras pasa un
+    // `length` ingenuo. Se mide lo que hay, no lo que ocupa.
+    const relleno = `Encaja.${' '.repeat(200)}`
+    expect(() =>
+      parseRoutingSuggestion(shortlistCrudo([{ ...ANA, reasoning: relleno }, CARLA]), ENTRADA),
+    ).toThrow(ValidationError)
+
+    const conBordes = `  ${'x'.repeat(MIN_ROUTING_REASONING_LENGTH)}  `
+    const sugerencia = parseRoutingSuggestion(
+      shortlistCrudo([{ ...ANA, reasoning: conBordes }, CARLA]),
+      ENTRADA,
+    )
+    if (sugerencia.kind !== 'shortlist') throw new Error('no era un shortlist')
+    expect(sugerencia.entries[0]?.reasoning).toBe(conBordes.trim())
   })
 
   it('rechaza el mismo puesto dos veces', () => {
@@ -184,19 +284,54 @@ describe('el shortlist que llega del modelo', () => {
   })
 
   it(`rechaza menos de ${String(MIN_CANDIDATES)} candidatos: con uno no hay a quien comparar`, () => {
-    const crudo = shortlistCrudo([ANA])
-    expect(() => parseRoutingSuggestion(crudo, ENTRADA)).toThrow(ValidationError)
+    expect(() => parseRoutingSuggestion(shortlistDe(1), ENTRADA_ANCHA)).toThrow(/devolvio 1/)
   })
 
   it(`rechaza mas de ${String(MAX_CANDIDATES)} candidatos: deja de ser sugerencia y es el censo`, () => {
-    const crudo = shortlistCrudo(
-      [1, 2, 3, 4, 5].map((rank) => ({ ...ANA, candidateId: `p${String(rank)}`, rank })),
-    )
-    expect(() => parseRoutingSuggestion(crudo, ENTRADA)).toThrow(ValidationError)
+    expect(() => parseRoutingSuggestion(shortlistDe(5), ENTRADA_ANCHA)).toThrow(/devolvio 5/)
+  })
+
+  it.each([MIN_CANDIDATES, MAX_CANDIDATES])('acepta exactamente %i candidatos', (cuantos) => {
+    // Los dos extremos, que son justo donde una comparacion mal puesta —`<=` en
+    // vez de `<`— dejaria de verse.
+    const sugerencia = parseRoutingSuggestion(shortlistDe(cuantos), ENTRADA_ANCHA)
+    expect(sugerencia.kind).toBe('shortlist')
   })
 
   it('rechaza una respuesta que no encaja con el esquema pedido', () => {
-    expect(() => parseRoutingSuggestion({ outcome: 'quiza' }, ENTRADA)).toThrow(ValidationError)
+    expect(() => parseRoutingSuggestion({ outcome: 'quiza' }, ENTRADA)).toThrow(
+      /no encaja con el esquema pedido/,
+    )
+  })
+})
+
+describe('el esquema que se le pide al modelo', () => {
+  const item = ((ROUTING_OUTPUT_SCHEMA['properties'] as Record<string, Record<string, unknown>>)[
+    'candidates'
+  ]?.['items'] ?? {}) as Record<string, unknown>
+
+  it('pide el puesto EL ULTIMO, despues del razonamiento y la evidencia', () => {
+    // No es cosmetico: el orden de las claves es el orden de generacion. Si el
+    // puesto se generase primero, el razonamiento seria una justificacion a
+    // posteriori de una decision ya tomada. Mismo criterio que en el Verifier.
+    const required = item['required'] as readonly string[]
+    expect(required.at(-1)).toBe('rank')
+    expect(required.indexOf('reasoning')).toBeLessThan(required.indexOf('rank'))
+    expect(required.indexOf('evidenceFiles')).toBeLessThan(required.indexOf('rank'))
+  })
+
+  it('exige el resultado y no admite claves de mas', () => {
+    expect(ROUTING_OUTPUT_SCHEMA['required']).toEqual(['outcome'])
+    // Sin esto, un campo inventado por el modelo entraria sin que nadie lo mire.
+    expect(ROUTING_OUTPUT_SCHEMA['additionalProperties']).toBe(false)
+    expect(item['additionalProperties']).toBe(false)
+  })
+
+  it('ofrece no_match como una de las dos salidas posibles', () => {
+    const outcome = (
+      ROUTING_OUTPUT_SCHEMA['properties'] as Record<string, Record<string, unknown>>
+    )['outcome']
+    expect(outcome?.['enum']).toEqual(['shortlist', 'no_match'])
   })
 })
 
@@ -212,10 +347,30 @@ describe('"sin match claro" es una respuesta de primera clase', () => {
     expect(sugerencia).toEqual({ kind: 'no_match', reason: razon })
   })
 
+  it('acepta un no_match de exactamente el minimo, y rechaza el de uno menos', () => {
+    const justo = 'y'.repeat(MIN_ROUTING_REASONING_LENGTH)
+    expect(parseRoutingSuggestion({ outcome: 'no_match', noMatchReason: justo }, ENTRADA)).toEqual({
+      kind: 'no_match',
+      reason: justo,
+    })
+    expect(() =>
+      parseRoutingSuggestion({ outcome: 'no_match', noMatchReason: justo.slice(1) }, ENTRADA),
+    ).toThrow(ValidationError)
+  })
+
+  it('el relleno tampoco cuenta como explicacion de un no_match', () => {
+    expect(() =>
+      parseRoutingSuggestion(
+        { outcome: 'no_match', noMatchReason: `Nadie.${' '.repeat(200)}` },
+        ENTRADA,
+      ),
+    ).toThrow(ValidationError)
+  })
+
   it('rechaza un no_match sin explicacion: quien reparte la tarea la reparte igual', () => {
     expect(() =>
       parseRoutingSuggestion({ outcome: 'no_match', noMatchReason: 'nadie' }, ENTRADA),
-    ).toThrow(ValidationError)
+    ).toThrow(new RegExp(`minimo ${String(MIN_ROUTING_REASONING_LENGTH)} caracteres`))
     expect(() => parseRoutingSuggestion({ outcome: 'no_match' }, ENTRADA)).toThrow(ValidationError)
   })
 })
@@ -246,6 +401,47 @@ describe('el mensaje que se le manda al modelo', () => {
       ),
     }
     expect(taskMessage(conCargaIncompleta).content).toContain('INCOMPLETA')
+  })
+
+  it('cada evidencia lleva su ruta, sus lineas y sus commits', () => {
+    // Sin las tres cosas el modelo no puede distinguir a quien escribio el
+    // fichero de quien lo visito: es la diferencia entre los casos 01 y 02 del
+    // banco.
+    expect(taskMessage(ENTRADA).content).toContain(
+      'packages/billing/src/retry.ts — 412 lineas en 9 commit(s)',
+    )
+  })
+
+  it('ordena la evidencia de cada candidato por lineas, de mas a menos', () => {
+    const conDos: RoutingInput = {
+      ...ENTRADA,
+      candidates: ENTRADA.candidates.map((c) =>
+        c.id === 'ana'
+          ? {
+              ...c,
+              ownership: [
+                { path: 'packages/billing/src/poco.ts', lines: 5, commits: 1 },
+                ...c.ownership,
+              ],
+            }
+          : c,
+      ),
+    }
+    const texto = taskMessage(conDos).content
+    expect(texto.indexOf('retry.ts — 412')).toBeLessThan(texto.indexOf('poco.ts — 5'))
+  })
+
+  it('lleva el cuerpo del issue cuando lo hay, y no inventa nada cuando no', () => {
+    expect(taskMessage(ENTRADA).content).toContain('Reportado por dos clientes')
+
+    const sinCuerpo: RoutingInput = {
+      taskRef: ENTRADA.taskRef,
+      taskTitle: ENTRADA.taskTitle,
+      files: ENTRADA.files,
+      candidates: ENTRADA.candidates,
+    }
+    expect(taskMessage(sinCuerpo).content).toContain(ENTRADA.taskTitle)
+    expect(taskMessage(sinCuerpo).content).not.toContain('Reportado')
   })
 
   it('dice cuando el grafo no sabe que ficheros toca la tarea', () => {
