@@ -49,9 +49,9 @@ export interface ListCochangeCommitsOptions {
  * visiblemente en el commit de un renombrado grande.
  *
  * ---------------------------------------------------------------------------
- * VENTANA DE HISTORIAL: `--since`, NO "ultimos N commits"
+ * VENTANA DE HISTORIAL: una ventana de TIEMPO, NO "ultimos N commits"
  * ---------------------------------------------------------------------------
- * Se eligio una ventana de TIEMPO (`--since`) sobre un conteo de commits
+ * Se eligio una ventana de TIEMPO sobre un conteo de commits
  * porque la cadencia de commits varia muchisimo entre repos y entre equipos:
  * "los ultimos 500 commits" son dos semanas en un repo con mucho trafico y
  * varios anos en uno tranquilo, asi que como senal de "que esta acoplado
@@ -78,7 +78,25 @@ export async function listCochangeCommits(
       'log',
       '--no-renames',
       '--name-only',
-      `--since=${String(options.sinceMonths)} months ago`,
+      // `--since-as-filter`, NO `--since`. MEDIDO, no supuesto: `--since` PARA
+      // DE RECORRER en cuanto encuentra un commit mas viejo que el corte, en
+      // vez de filtrar. Un solo commit con la fecha desviada en la punta —un
+      // rebase, un `git commit --date`, un reloj mal puesto, historial
+      // importado de otro VCS, un `git filter-repo`— vacia la ventana ENTERA
+      // sin un solo error. Comprobado con git 2.43 sobre un repo de tres
+      // commits, el ultimo fechado dos años atras: `--since=12 months ago`
+      // devolvio CERO commits y `--since-as-filter=12 months ago` devolvio los
+      // dos recientes. Cero, no "menos".
+      //
+      // El sintoma habria sido "el overlay de co-cambio no produce nada" o
+      // "produce muchisimo menos de lo que deberia", sin nada que lo explique:
+      // los pares no aparecerian, y `unresolvedPairs` tampoco subiria, porque
+      // no es que no se resuelvan, es que no llegan a existir.
+      //
+      // Existe desde git 2.37 (2022). Si alguien corre uno anterior, git falla
+      // en voz alta con "unknown option", que es infinitamente mejor que
+      // devolver una lista vacia y que nadie se entere.
+      `--since-as-filter=${String(options.sinceMonths)} months ago`,
       `--pretty=format:${SHA_MARK}%H${AFTER_SHA_MARK}`,
     ],
     { maxBuffer: MAX_OUTPUT_BYTES, encoding: 'utf8' },
