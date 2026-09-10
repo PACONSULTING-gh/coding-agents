@@ -57,7 +57,7 @@ mensajería. Es decisión de producto, no técnica.
 
 ### 4. Flujo de fallo de verificación — ~~PENDIENTE~~ **DECIDIDA (9 sep 2026)**
 **Bloqueaba:** Epic 05 T06
-**Decisión:** `docs/adr/0008-flujo-de-fallo-y-ambiguedad.md`.
+**Decisión:** `docs/adr/0008-flujo-de-fallo-y-ambiguedad.md`, **aceptado el 10 de septiembre de 2026**.
 
 Resumen: no hay *un* flujo de fallo, hay **cuatro modos con tres destinos**. Un
 fallo del gate o un FAIL del Verifier vuelven al mismo agente; un SIN_EVIDENCIA
