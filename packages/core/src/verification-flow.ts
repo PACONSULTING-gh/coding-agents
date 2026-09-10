@@ -153,17 +153,31 @@ function assertInput(input: VerificationFlowInput, maxAttempts: number): void {
       `attempts tiene que ser un entero >= 0 y se recibio ${String(input.state.attempts)}.`,
     )
   }
-  if (input.outcome === 'verifier_no_evidence' && (input.noEvidenceCriteria ?? []).length === 0) {
-    // Es una contradiccion, no un caso borde: si el veredicto es
-    // `verifier_no_evidence` tiene que haber al menos un criterio sin
-    // evidencia. Tragarselo aqui haria que un spec ambiguo no se detectara
-    // nunca, porque el contador por criterio no subiria jamas.
+}
+
+/**
+ * Los criterios sin evidencia de esta pasada, garantizando que hay al menos
+ * uno.
+ *
+ * Vive JUNTO A SU USO y no en `assertInput` a proposito: asi el `?? []` es
+ * codigo vivo —lo ejercita el camino que lanza— en vez de una guarda defensiva
+ * que ningun test puede alcanzar.
+ *
+ * Que falten es una contradiccion, no un caso borde: si el veredicto es
+ * `verifier_no_evidence` tiene que haber al menos un criterio sin evidencia.
+ * Tragarselo haria que un spec ambiguo no se detectara NUNCA, porque el
+ * contador por criterio no subiria jamas.
+ */
+function requireNoEvidenceCriteria(input: VerificationFlowInput): readonly string[] {
+  const criterios = input.noEvidenceCriteria ?? []
+  if (criterios.length === 0) {
     throw new ValidationError(
       'Un resultado `verifier_no_evidence` sin `noEvidenceCriteria` es incoherente: sin saber ' +
         'que criterios quedaron sin evidencia, el contador por criterio no sube y un spec ' +
         'ambiguo no se detecta nunca.',
     )
   }
+  return criterios
 }
 
 /**
@@ -216,7 +230,10 @@ export function decideVerificationFlow(input: VerificationFlowInput): Verificati
   const agotados = attemptsAfter >= maxAttempts
 
   if (input.outcome === 'verifier_no_evidence') {
-    const tally = tallyNoEvidence(input.state.noEvidenceByCriterion, input.noEvidenceCriteria ?? [])
+    const tally = tallyNoEvidence(
+      input.state.noEvidenceByCriterion,
+      requireNoEvidenceCriteria(input),
+    )
     const reiterado = criterioReiterado(tally)
     if (reiterado !== undefined) {
       return {
