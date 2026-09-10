@@ -253,3 +253,81 @@ describe('un aviso que no sale no se da por enviado', () => {
     ).rejects.toThrow(/503/)
   }, 90_000)
 })
+
+describe('el aviso que sale por el puerto lleva exactamente lo que hay', () => {
+  /**
+   * La forma del `EscalationNotice` es el CONTRATO con los adaptadores: uno
+   * puede preguntar `'headSha' in notice` en vez de comparar con `undefined`.
+   * Mandar `{ headSha: undefined }` cuando no hay SHA no es lo mismo que no
+   * mandar la clave, y la diferencia solo se ve desde el otro lado.
+   */
+  it('sin datos opcionales, el aviso no lleva claves vacias', async () => {
+    const notificaciones = new NotificadorDePrueba()
+    const taskRef = nuevaTarea()
+
+    await runWithTenant({ tenantId, actorId }, () =>
+      handleVerificationOutcome(
+        { taskRef, outcome: 'verifier_unavailable' },
+        { notifications: notificaciones, logger },
+      ),
+    )
+
+    const aviso = notificaciones.avisos[0]
+    expect(Object.keys(aviso ?? {}).sort()).toEqual([
+      'attempts',
+      'destination',
+      'maxAttempts',
+      'reason',
+      'taskRef',
+    ])
+  }, 90_000)
+
+  it('con todos los datos, el aviso los lleva todos', async () => {
+    const notificaciones = new NotificadorDePrueba()
+    const taskRef = nuevaTarea()
+
+    await runWithTenant({ tenantId, actorId }, () =>
+      handleVerificationOutcome(
+        {
+          taskRef,
+          outcome: 'verifier_unavailable',
+          headSha: 'c'.repeat(40),
+          responsible: { kind: 'user', id: 'u-1', label: 'Javier' },
+          mention: 'JVISERASS',
+          reportMarkdown: '## Informe',
+        },
+        { notifications: notificaciones, logger },
+      ),
+    )
+
+    expect(Object.keys(notificaciones.avisos[0] ?? {}).sort()).toEqual([
+      'attempts',
+      'destination',
+      'headSha',
+      'maxAttempts',
+      'mention',
+      'reason',
+      'reportMarkdown',
+      'responsible',
+      'taskRef',
+    ])
+  }, 90_000)
+
+  it('el tope que se anuncia en el aviso es el que se uso de verdad', async () => {
+    // Si se anunciara siempre el de por defecto, un aviso de una politica de un
+    // solo intento diria "1 de 2" y quien lo leyera esperaria otra pasada que
+    // no va a llegar.
+    const notificaciones = new NotificadorDePrueba()
+    const taskRef = nuevaTarea()
+
+    await runWithTenant({ tenantId, actorId }, () =>
+      handleVerificationOutcome(
+        { taskRef, outcome: 'verifier_fail', maxAttempts: 1 },
+        { notifications: notificaciones, logger },
+      ),
+    )
+
+    expect(notificaciones.avisos[0]?.attempts).toBe(1)
+    expect(notificaciones.avisos[0]?.maxAttempts).toBe(1)
+  }, 90_000)
+})
