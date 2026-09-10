@@ -173,6 +173,17 @@ function heritageReferences(declaration: SyntaxNode, owner: string): ParsedRefer
   for (const child of declaration.namedChildren) {
     if (child.type === 'class_heritage') {
       for (const clause of child.namedChildren) {
+        // La gramatica de JavaScript cuelga el identificador DIRECTAMENTE de
+        // `class_heritage`; la de TypeScript lo envuelve en `extends_clause`.
+        // Sin este caso, NINGUNA herencia de un fichero .js/.jsx llegaba al
+        // grafo: `class A extends B` no producia arista. Se descubrio
+        // escribiendo los tests de parse (issue #48), no en uso, porque los
+        // tests de ingesta solo cuentan nodos y el recuento cuadraba igual.
+        const direct = referenceOf(clause, owner)
+        if (direct !== undefined) {
+          references.push(direct)
+          continue
+        }
         const value = clause.childForFieldName('value')
         const candidates = value === null ? clause.namedChildren : [value]
         for (const candidate of candidates) {
