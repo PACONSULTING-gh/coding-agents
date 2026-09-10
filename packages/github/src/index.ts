@@ -50,6 +50,13 @@ export {
 export type { SubscribedEvent, GithubWebhookJob } from './events.js'
 
 export {
+  ROUTING_SKIP_REASONS,
+  decideRoutingTrigger,
+  runWithoutBlocking,
+} from './routing-trigger.js'
+export type { RoutableIssue, RoutingSkipReason, RoutingTrigger } from './routing-trigger.js'
+
+export {
   extractInstallationId,
   extractAction,
   parseInstallationDescriptor,
