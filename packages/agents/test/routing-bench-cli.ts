@@ -1,14 +1,17 @@
 /**
  * Mide el routing contra el modelo DE VERDAD.
  *
- *     ANTHROPIC_API_KEY=... pnpm --filter @coord/agents measure:routing
- *     pnpm --filter @coord/agents measure:routing -- --via cli --model claude-sonnet-5
+ *     pnpm --filter @coord/agents measure:routing -- --model claude-sonnet-5
+ *     ANTHROPIC_API_KEY=... pnpm --filter @coord/agents measure:routing -- --via api
  *
  * ===========================================================================
  * QUE SE HA MEDIDO Y QUE NO
  * ===========================================================================
- * Por la ruta de API (la de PRODUCCION): NADA. No hay credenciales en esta
- * maquina, asi que la cifra del modelo de produccion SIGUE SIN MEDIR.
+ * Por la ruta de API (alternativa desde el ADR 0009): NADA. No hay credenciales
+ * en esta maquina. Ya no es una laguna: esa ruta no se despliega.
+ *
+ * Lo que SI sigue sin medir es el MODELO de produccion, `claude-opus-5`, que
+ * rechaza la peticion por la ruta que se despliega (issue #27).
  *
  * Por la ruta del CLI con `claude-sonnet-5`, el 10 de septiembre de 2026, los
  * siete casos:
@@ -41,8 +44,8 @@
  *     `forbiddenTop` y `forbiddenTops` se añadieron por esto.
  *
  * Y una cifra asi NO es transferible a Opus: medir Sonnet y presentarlo como la
- * cifra de produccion seria justo el numero inventado que este proyecto
- * persigue.
+ * cifra del modelo configurado seria justo el numero inventado que este
+ * proyecto persigue.
  *
  * Mismo argumento que el banco de trampas: es un comando explicito y no un
  * test, porque siete llamadas con esfuerzo `xhigh` en cada CI serian una
@@ -71,15 +74,16 @@ import { ROUTING_BENCH_CASES } from './fixtures/routing/index.js'
 const API_KEY_ENV = 'ANTHROPIC_API_KEY'
 
 /**
- * Por donde se habla con el modelo. Mismas dos rutas y mismas advertencias que
- * en `trap-suite-cli.ts`: `api` es produccion, `cli` es una ruta de MEDICION
- * sobre una suscripcion ya pagada, y lo que salga por ahi hay que citarlo asi.
+ * Por donde se habla con el modelo. Mismas dos rutas y mismo reparto que en
+ * `trap-suite-cli.ts`: `cli` (por defecto) es la ruta de PRODUCCION sobre la
+ * suscripcion desde el ADR 0009, y `api` la alternativa que sigue escrita pero
+ * no se despliega.
  */
 type Via = 'api' | 'cli'
 
 function parseVia(argv: readonly string[]): Via {
   const index = argv.indexOf('--via')
-  if (index === -1) return 'api'
+  if (index === -1) return 'cli'
   const value = argv[index + 1]
   if (value !== 'api' && value !== 'cli') {
     process.stderr.write(`--via acepta 'api' o 'cli', y se le paso ${JSON.stringify(value)}.\n`)
@@ -89,9 +93,9 @@ function parseVia(argv: readonly string[]): Via {
 }
 
 /**
- * `--model` para medir con un modelo distinto al de produccion. Hoy es la unica
- * forma de correr el banco por la ruta de suscripcion, porque `claude-opus-5`
- * rechaza la peticion por ahi (issue #27).
+ * `--model` para medir con un modelo distinto al configurado. Hoy es la unica
+ * forma de correr el banco, porque `claude-opus-5` rechaza la peticion por la
+ * ruta que se despliega (issue #27).
  *
  * Una tasa no es transferible entre modelos: medir Sonnet y presentarlo como la
  * cifra de Opus seria justo el numero inventado que este proyecto persigue.
@@ -108,7 +112,7 @@ async function buildLlm(via: Via): Promise<LlmPort> {
     const cwd = await mkdtemp(join(tmpdir(), 'routing-bench-'))
     process.stderr.write(
       `Midiendo ${String(ROUTING_BENCH_CASES.length)} casos con el CLI de Claude Code ` +
-        '(suscripcion). AVISO: no es la ruta de produccion; cita la cifra como medida por CLI.\n',
+        '(suscripcion), que es la ruta de produccion (ADR 0009).\n',
     )
     return new ClaudeCliLlm({ cwd })
   }
@@ -120,7 +124,8 @@ async function buildLlm(via: Via): Promise<LlmPort> {
     process.stderr.write(
       `Falta ${API_KEY_ENV}. Este comando mide contra el modelo de verdad y no tiene modo ` +
         'degradado: sin clave no hay medicion, y una tasa inventada es peor que ninguna. ' +
-        'Alternativa sobre una suscripcion ya pagada: --via cli --model claude-sonnet-5.\n',
+        'Ojo: --via api es la ruta ALTERNATIVA (ADR 0009). La de produccion es la de por ' +
+        'defecto: --model claude-sonnet-5, sin clave.\n',
     )
     process.exit(2)
   }

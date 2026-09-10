@@ -1,21 +1,27 @@
 /**
  * Mide la tasa de falso aprobado del Verifier contra el modelo DE VERDAD.
  *
- *     ANTHROPIC_API_KEY=... pnpm --filter @coord/agents measure:trap-suite
+ *     pnpm --filter @coord/agents measure:trap-suite -- --model claude-sonnet-5
+ *     ANTHROPIC_API_KEY=... pnpm --filter @coord/agents measure:trap-suite -- --via api
  *
  * ===========================================================================
- * ESTE COMANDO NO SE HA EJECUTADO NUNCA
+ * QUE SE HA MEDIDO Y QUE NO
  * ===========================================================================
- * En la maquina donde se escribio T04 no hay credenciales de Anthropic, asi que
- * el banco solo se ha corrido contra el doble HTTP local — que comprueba el
- * INSTRUMENTO y no dice nada sobre el Verifier. La tasa de falso aprobado que
- * pide el cuarto criterio de aceptacion de T04 ESTA SIN MEDIR, y el criterio
- * queda pendiente hasta que alguien corra esto y pegue la salida.
+ * Corrido el 9 de septiembre de 2026 por la ruta de CLI —la de PRODUCCION
+ * desde el ADR 0009— con `claude-sonnet-5`: 0 de 6 trampas aprobadas y 0 de 1
+ * casos limpios bloqueados, con un desacuerdo (el caso de inyeccion contesto
+ * SIN_EVIDENCIA donde el banco espera FAIL). La cifra entera, con las tres
+ * cosas que NO dice, esta en el README de este paquete.
  *
- * Cuesta dinero: son siete llamadas a `claude-opus-5` con esfuerzo `xhigh`
- * sobre diffs enteros. Por eso es un comando explicito y no un test: un banco
- * que se dispara solo en cada CI seria una factura recurrente por una cifra que
- * apenas se mueve.
+ * LO QUE SIGUE SIN MEDIR es el MODELO configurado, `claude-opus-5`: rechaza la
+ * peticion del Verifier con la categoria `reasoning_extraction` (issue #27), y
+ * desde el ADR 0009 eso ya no es un estorbo para medir sino un bloqueo de
+ * produccion, porque el rechazo es por el camino que se despliega.
+ *
+ * No corre en CI a proposito: siete llamadas con esfuerzo `xhigh` sobre diffs
+ * enteros en cada push serian un peaje recurrente —de factura por la ruta de
+ * API, de limites de suscripcion por la de CLI— por una cifra que apenas se
+ * mueve. Por eso es un comando explicito.
  *
  * ---------------------------------------------------------------------------
  * POR QUE VIVE EN `test/` Y NO EN `src/`
@@ -43,19 +49,23 @@ const API_KEY_ENV = 'ANTHROPIC_API_KEY'
 /**
  * Por donde se habla con el modelo.
  *
- *   - `api` (por defecto) — la ruta de PRODUCCION que fija el PRD §5. Cuesta
- *     dinero por token.
- *   - `cli` — el CLI de Claude Code sobre una suscripcion ya pagada. Es una
- *     ruta de MEDICION, no de produccion: su aislamiento es una lista negra de
- *     herramientas y no una propiedad del transporte, y no hay salida
- *     estructurada garantizada. Lo que salga por aqui hay que CITARLO ASI, no
- *     como si fuera la cifra de la ruta de API.
+ *   - `cli` (por defecto) — el CLI de Claude Code sobre la suscripcion. Es LA
+ *     RUTA DE PRODUCCION desde el ADR 0009, y por eso es la que se mide por
+ *     defecto: un banco que mide un transporte que no se despliega da una
+ *     cifra que no describe nada.
+ *   - `api` — la ruta alternativa (`anthropic.ts`), que sigue escrita para los
+ *     disparadores del ADR 0009 pero hoy no se usa. Cuesta dinero por token.
+ *
+ * Lo que sigue siendo verdad del CLI, y hay que citarlo al dar la cifra: su
+ * aislamiento es una lista negra de herramientas y no una propiedad del
+ * transporte, y no hay salida estructurada garantizada por el servidor. Eso es
+ * el precio del ADR 0009, no una tacha de la medida.
  */
 type Via = 'api' | 'cli'
 
 function parseVia(argv: readonly string[]): Via {
   const index = argv.indexOf('--via')
-  if (index === -1) return 'api'
+  if (index === -1) return 'cli'
   const value = argv[index + 1]
   if (value !== 'api' && value !== 'cli') {
     process.stderr.write(`--via acepta 'api' o 'cli', y se le paso ${JSON.stringify(value)}.\n`)
@@ -70,8 +80,8 @@ async function buildLlm(via: Via): Promise<LlmPort> {
     // hay nada que leer. Ver la cabecera de `claude-cli.ts`.
     const cwd = await mkdtemp(join(tmpdir(), 'trap-suite-'))
     process.stderr.write(
-      `Midiendo ${String(TRAP_CASES.length)} casos con el CLI de Claude Code (suscripcion). ` +
-        'AVISO: no es la ruta de produccion; la cifra hay que citarla como medida por CLI.\n',
+      `Midiendo ${String(TRAP_CASES.length)} casos con el CLI de Claude Code (suscripcion), ` +
+        'que es la ruta de produccion (ADR 0009).\n',
     )
     return new ClaudeCliLlm({ cwd })
   }
@@ -85,7 +95,8 @@ async function buildLlm(via: Via): Promise<LlmPort> {
     process.stderr.write(
       `Falta ${API_KEY_ENV}. Este comando mide contra el modelo de verdad y no tiene modo ` +
         'degradado: sin clave no hay medicion, y una tasa inventada es peor que ninguna. ' +
-        'Alternativa sobre una suscripcion ya pagada: --via cli.\n',
+        'Ojo: --via api es la ruta ALTERNATIVA (ADR 0009). La de produccion es la de por ' +
+        'defecto, y no necesita clave.\n',
     )
     process.exit(2)
   }
@@ -98,15 +109,17 @@ async function buildLlm(via: Via): Promise<LlmPort> {
 }
 
 /**
- * `--model` para poder medir con un modelo distinto al de produccion.
+ * `--model` para poder medir con un modelo distinto al configurado.
  *
  * No es un capricho: medido el 9 de septiembre de 2026, `claude-opus-5` sobre
  * el CLI RECHAZA la peticion del Verifier con la categoria
  * `reasoning_extraction` (2 de 2 intentos), mientras que `claude-sonnet-5`
- * responde con normalidad. Sin esta opcion, el banco no se puede correr por la
- * ruta de suscripcion en absoluto.
+ * responde con normalidad. Sin esta opcion, el banco no se puede correr en
+ * absoluto por la ruta que ahora es la de produccion — y eso, desde el ADR
+ * 0009, no es un estorbo para medir sino un BLOQUEO DE PRODUCCION: el modelo
+ * por defecto no contesta por el camino que se despliega (issue #27).
  *
- * Lo que salga con un modelo que NO es el de produccion hay que citarlo
+ * Lo que salga con un modelo que NO es el configurado hay que citarlo
  * nombrando el modelo. Una tasa de falso aprobado no es transferible entre
  * modelos: medir Sonnet y presentarlo como la cifra de Opus seria justo la
  * clase de numero inventado que este epic existe para evitar.

@@ -175,12 +175,18 @@ en "nunca". Conviene revisarlo al cierre de cada epic.
 
 ## 5. Presupuesto de tokens
 
-Los agentes de código corren sobre suscripciones ya pagadas. Los agentes propios
-(router, verifier, heartbeat) van por API y hay que vigilarlos:
+**Todo** corre sobre suscripciones ya pagadas, también los agentes propios
+—router, Verifier, heartbeat—, por el CLI de Claude Code (ADR 0009; hasta el 10
+de septiembre de 2026 este renglón decía que iban por API). Que no haya factura
+por token no quita la vigilancia: lo que se consume ahora son **límites de la
+suscripción**, compartidos con el trabajo de las personas, y agotarlos deja al
+equipo sin herramienta. Lo mismo que había que vigilar, con otra moneda:
 
 - Caché de prompts en todo prompt de sistema estático.
 - Modelo por rol: el clasificador de heartbeats es el más barato disponible y
   sin extended thinking; el Verifier es el más capaz y con thinking alto.
-- Tope de coste por tarea, y alerta si un agente lo supera.
+- Tope de coste por tarea, y alerta si un agente lo supera. El CLI devuelve
+  `input_tokens`, `output_tokens`, `cache_read_input_tokens` y `total_cost_usd`
+  por llamada, así que la contabilidad existe por las dos rutas.
 - El heartbeat vigila la quema anómala: es la defensa contra el bucle infinito
   que multiplica la factura.
