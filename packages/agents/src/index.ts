@@ -18,6 +18,10 @@
  *   * `routing/router.ts` — T02: el agente que produce el shortlist. SUGIERE,
  *     nunca asigna (CLAUDE.md 2.1). El orden del razonamiento —evidencia de
  *     skill primero, carga despues— es la decision de diseño del epic entero.
+ *   * `routing/bench.ts` — T02: el banco que mide si la evidencia de skill le
+ *     gana a la carga cuando tienen que competir. Es el INSTRUMENTO; la cifra
+ *     contra el modelo real NO esta medida. Exige los tres tipos de caso
+ *     porque una sola tasa siempre se puede maximizar haciendo trampa.
  *   * `verification/test-generator.ts` — T02: los tests los escribe un agente
  *     distinto al que implementa, a partir de los criterios y NUNCA del codigo.
  *   * `verification/test-manifest.ts` — T02: manifiesto firmado del arbol de
@@ -59,6 +63,7 @@ export * from './anthropic.js'
 export * from './claude-cli.js'
 export * from './routing/shortlist.js'
 export * from './routing/router.js'
+export * from './routing/bench.js'
 export * from './verification/test-manifest.js'
 export * from './verification/test-generator.js'
 export * from './verification/generated-tests-fs.js'

@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p test/tsconfig.json",
     "test": "vitest run",
     "verify:generated-tests": "tsx src/verification/verify-generated-tests-cli.ts",
-    "measure:trap-suite": "tsx test/trap-suite-cli.ts"
+    "measure:trap-suite": "tsx test/trap-suite-cli.ts",
+    "measure:routing": "tsx test/routing-bench-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
