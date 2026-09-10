@@ -12,7 +12,9 @@
     "test": "vitest run",
     "verify:generated-tests": "tsx src/verification/verify-generated-tests-cli.ts",
     "measure:trap-suite": "tsx test/trap-suite-cli.ts",
-    "measure:routing": "tsx test/routing-bench-cli.ts"
+    "measure:routing": "tsx test/routing-bench-cli.ts",
+    "probe:refusal": "tsx test/refusal-probe-cli.ts",
+    "probe:once": "tsx test/verifier-once-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
