@@ -62,7 +62,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await repo?.cleanup()
   await closeDatabase()
-  await database?.container.stop()
+  await database?.stop()
 })
 
 describe('paquetes locales del workspace', () => {

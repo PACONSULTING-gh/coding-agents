@@ -96,7 +96,7 @@ describe('2-5. ingesta del grafo de build contra Postgres de verdad', () => {
 
   afterAll(async () => {
     await closeDatabase()
-    await db?.container.stop()
+    await db?.stop()
   })
 
   const FIXTURES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')

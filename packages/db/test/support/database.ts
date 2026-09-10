@@ -92,8 +92,16 @@ function derivedRolePassword(serverUrl: string, role: string): string {
   return createHash('sha256').update(`${serverUrl}\u0000${role}`).digest('hex').slice(0, 48)
 }
 
-/** Aplica el bootstrap y el resto de migraciones sobre una base ya creada. */
-async function bootstrapSchema(
+/**
+ * Aplica el bootstrap y el resto de migraciones sobre una base ya creada.
+ *
+ * Exportada porque `packages/graph` monta su propia variante del mismo patron:
+ * necesita `sql()` de superusuario para un `ANALYZE` que la capa de acceso no
+ * puede hacer, y eso no cabe en el `StartedDatabase` de aqui. Duplicar estos
+ * tres pasos en el otro paquete significaria que el dia que cambie el bootstrap
+ * de roles habria que acordarse de los dos sitios.
+ */
+export async function bootstrapSchema(
   databaseUrl: string,
   adminUrl: string,
   serverUrl: string,

@@ -61,7 +61,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeDatabase()
-  await db?.container.stop()
+  await db?.stop()
 })
 
 interface Actor {

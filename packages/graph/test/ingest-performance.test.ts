@@ -53,7 +53,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await repo?.cleanup()
   await closeDatabase()
-  await db?.container.stop()
+  await db?.stop()
 })
 
 /** Un modulo con la forma de uno real: imports, clase, herencia y llamadas. */

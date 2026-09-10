@@ -35,7 +35,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeDatabase()
-  await db?.container.stop()
+  await db?.stop()
 })
 
 describe('1. conjunto transitivo y tope de profundidad', () => {

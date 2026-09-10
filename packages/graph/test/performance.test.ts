@@ -13,7 +13,7 @@ import {
   findDependents,
 } from '../src/queries.js'
 
-import { psql, startDatabase, type StartedDatabase } from './support/database.js'
+import { startDatabase, type StartedDatabase } from './support/database.js'
 import { createTenant, percentile } from './support/fixtures.js'
 
 /**
@@ -134,7 +134,7 @@ beforeAll(async () => {
   // ANALYZE antes de insertar las aristas: sin estadisticas, el planner elegia
   // un seq scan de graph_nodes por cada fila de la serie y la preparacion del
   // escenario se iba a minutos.
-  await psql(db.container, 'ANALYZE graph_nodes')
+  await db.sql('ANALYZE graph_nodes')
 
   await runWithTenant({ tenantId }, () =>
     withTenantConnection(async (tx) => {
@@ -190,12 +190,12 @@ beforeAll(async () => {
     }),
   )
 
-  await psql(db.container, 'ANALYZE graph_nodes, graph_edges')
+  await db.sql('ANALYZE graph_nodes, graph_edges')
 }, 600_000)
 
 afterAll(async () => {
   await closeDatabase()
-  await db?.container.stop()
+  await db?.stop()
 })
 
 describe('rendimiento de la consulta de dependencias inversas', () => {
