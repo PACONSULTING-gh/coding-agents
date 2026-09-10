@@ -198,3 +198,84 @@ describe('entradas incoherentes: se lanza en vez de decidir sobre basura', () =>
     ).toThrow(ValidationError)
   })
 })
+
+describe('lo que cada modo consume y lo que NO toca', () => {
+  it.each([
+    ['gate_failed', true],
+    ['verifier_fail', true],
+    ['verifier_unavailable', false],
+  ] as const)('%s consume intento: %s', (outcome, consume) => {
+    // Que un modo gaste o no gaste el presupuesto del agente es LA decision de
+    // este flujo, y hasta ahora solo se comprobaba mirando `attemptsAfter`.
+    expect(decidir({ outcome }).consumesAttempt).toBe(consume)
+  })
+
+  it('SIN_EVIDENCIA consume intento, tanto si vuelve al agente como si va a criterios', () => {
+    expect(
+      decidir({ outcome: 'verifier_no_evidence', noEvidenceCriteria: ['tc01'] }).consumesAttempt,
+    ).toBe(true)
+    expect(
+      decidir({
+        outcome: 'verifier_no_evidence',
+        state: { attempts: 1, noEvidenceByCriterion: { tc01: 1 } },
+        noEvidenceCriteria: ['tc01'],
+      }).consumesAttempt,
+    ).toBe(true)
+  })
+
+  it.each(['passed', 'gate_failed', 'verifier_fail', 'verifier_unavailable'] as const)(
+    '%s NUNCA revoca la aprobacion de criterios',
+    (outcome) => {
+      // Si esto se invirtiera, un simple fallo de lint devolveria la tarea a la
+      // fase de criterios y obligaria a un humano a re-aprobar un spec que
+      // estaba perfectamente bien. Solo un SIN_EVIDENCIA reiterado revoca.
+      expect(decidir({ outcome }).revokesCriteriaApproval).toBe(false)
+    },
+  )
+})
+
+describe('el motivo dice CUAL de los dos fallos fue', () => {
+  it('distingue el gate determinista del FAIL del Verifier', () => {
+    // No es cosmetico: quien lo lee tiene que saber si mirar el log del build o
+    // el informe de conformidad. Son dos sitios distintos.
+    expect(decidir({ outcome: 'gate_failed' }).reason).toContain('El gate determinista fallo')
+    expect(decidir({ outcome: 'verifier_fail' }).reason).toContain(
+      'El Verifier encontro al menos un criterio en FAIL',
+    )
+  })
+
+  it('no confunde un fallo con la falta de evidencia', () => {
+    expect(decidir({ outcome: 'gate_failed' }).reason).not.toContain('sin evidencia')
+    expect(
+      decidir({ outcome: 'verifier_no_evidence', noEvidenceCriteria: ['tc01'] }).reason,
+    ).toContain('sin evidencia')
+  })
+})
+
+describe('el tope de intentos, en su borde', () => {
+  it('un tope de 1 es valido: hay proyectos sin segunda oportunidad', () => {
+    // El limite es `>= 1`, no `> 1`. Con un solo intento, el primer fallo ya
+    // escala — que es una politica legitima, no una entrada invalida.
+    const decision = decidir({ outcome: 'verifier_fail', maxAttempts: 1 })
+
+    expect(decision.destination).toBe('human')
+    expect(decision.attemptsAfter).toBe(1)
+  })
+})
+
+describe('cuando varios criterios se repiten a la vez', () => {
+  it('nombra siempre el mismo, no uno al azar', () => {
+    // El orden de `Object.entries` depende de como se construyo el objeto. Sin
+    // un criterio de desempate, dos ejecuciones sobre el mismo estado podrian
+    // culpar a criterios distintos, y el aviso dejaria de ser reproducible.
+    const decision = decideVerificationFlow({
+      outcome: 'verifier_no_evidence',
+      state: { attempts: 1, noEvidenceByCriterion: { 'tc09-zeta': 1, 'tc02-alfa': 1 } },
+      noEvidenceCriteria: ['tc09-zeta', 'tc02-alfa'],
+    })
+
+    expect(decision.destination).toBe('criteria_phase')
+    expect(decision.reason).toContain('tc02-alfa')
+    expect(decision.reason).not.toContain('tc09-zeta')
+  })
+})

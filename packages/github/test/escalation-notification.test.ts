@@ -126,3 +126,88 @@ describe('una tarea sin issue no se puede avisar por este canal', () => {
     ).rejects.toThrow(/un aviso que no llega no se puede dar por enviado/i)
   })
 })
+
+describe('a que issue va el comentario', () => {
+  /**
+   * Un doble de la App que captura la llamada. Sin esto, el camino de
+   * publicacion —incluida la traduccion de `taskRef` a numero de issue— solo
+   * estaba probado por su rama de error, y un aviso que va al issue equivocado
+   * es peor que uno que no sale: aparece resuelto y no lo esta.
+   */
+  function appQueCaptura() {
+    const llamadas: { owner: string; repo: string; issue_number: number; body: string }[] = []
+    const app = {
+      getInstallationOctokit: () =>
+        Promise.resolve({
+          rest: {
+            issues: {
+              createComment: (args: {
+                owner: string
+                repo: string
+                issue_number: number
+                body: string
+              }) => {
+                llamadas.push(args)
+                return Promise.resolve({ data: { id: 1, html_url: 'https://example.test/c/1' } })
+              },
+            },
+          },
+        }),
+    }
+    return { app, llamadas }
+  }
+
+  it.each([
+    ['issue-42', 42],
+    ['42', 42],
+    ['  issue-7  ', 7],
+  ])('%s se publica en el issue %i', async (taskRef, esperado) => {
+    const { app, llamadas } = appQueCaptura()
+    const notifier = new GitHubEscalationNotifier(app as never, {
+      installationId: 9,
+      owner: 'PACONSULTING-gh',
+      repo: 'coding-agents',
+    })
+
+    await notifier.notifyEscalation({ ...BASE, taskRef })
+
+    expect(llamadas).toHaveLength(1)
+    expect(llamadas[0]?.issue_number).toBe(esperado)
+    expect(llamadas[0]?.owner).toBe('PACONSULTING-gh')
+    expect(llamadas[0]?.repo).toBe('coding-agents')
+    expect(llamadas[0]?.body).toContain(BASE.reason)
+  })
+
+  it.each(['42-issue', 'issue-', 'issue-4a', 'pr-42'])(
+    '%s no se publica en ningun sitio: se lanza',
+    async (taskRef) => {
+      // Publicar "por si acaso" en un numero deducido a medias seria comentar
+      // en un issue de otra persona.
+      const { app, llamadas } = appQueCaptura()
+      const notifier = new GitHubEscalationNotifier(app as never, {
+        installationId: 9,
+        owner: 'o',
+        repo: 'r',
+      })
+
+      await expect(notifier.notifyEscalation({ ...BASE, taskRef })).rejects.toThrow(ValidationError)
+      expect(llamadas).toEqual([])
+    },
+  )
+
+  it('sin commit verificado no se escribe la linea con un undefined dentro', () => {
+    const texto = renderEscalationComment(BASE)
+    expect(texto).not.toContain('Commit verificado')
+    expect(texto).not.toContain('undefined')
+  })
+
+  it('la mencion se limpia de espacios antes de la arroba', () => {
+    const texto = renderEscalationComment({
+      ...BASE,
+      responsible: { kind: 'user', id: 'u-1', label: 'Javier' },
+      mention: '  JVISERASS  ',
+    })
+    expect(texto).toContain('@JVISERASS ')
+    expect(texto).not.toContain('@  ')
+  })
+})
