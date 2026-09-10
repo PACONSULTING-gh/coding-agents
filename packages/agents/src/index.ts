@@ -12,6 +12,12 @@
  *     MEDIR sobre una suscripcion ya pagada. NO es la ruta de produccion: su
  *     aislamiento es una lista negra de herramientas y no una propiedad del
  *     transporte. Lee su cabecera antes de usarlo.
+ *   * `routing/shortlist.ts` — T02 del epic 03: la forma del shortlist de
+ *     routing y su validacion. Pura y sin LLM: es la defensa que NO depende del
+ *     modelo (persona inventada, evidencia inventada, puestos con huecos).
+ *   * `routing/router.ts` — T02: el agente que produce el shortlist. SUGIERE,
+ *     nunca asigna (CLAUDE.md 2.1). El orden del razonamiento —evidencia de
+ *     skill primero, carga despues— es la decision de diseño del epic entero.
  *   * `verification/test-generator.ts` — T02: los tests los escribe un agente
  *     distinto al que implementa, a partir de los criterios y NUNCA del codigo.
  *   * `verification/test-manifest.ts` — T02: manifiesto firmado del arbol de
@@ -51,6 +57,8 @@
  */
 export * from './anthropic.js'
 export * from './claude-cli.js'
+export * from './routing/shortlist.js'
+export * from './routing/router.js'
 export * from './verification/test-manifest.js'
 export * from './verification/test-generator.js'
 export * from './verification/generated-tests-fs.js'
