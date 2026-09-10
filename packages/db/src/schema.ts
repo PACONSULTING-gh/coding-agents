@@ -202,5 +202,6 @@ export const DOMAIN_TABLES = [
   'acceptance_criteria',
   'acceptance_criteria_approvals',
   'verification_flow',
+  'routing_suggestions',
 ] as const
 export type DomainTable = (typeof DOMAIN_TABLES)[number]

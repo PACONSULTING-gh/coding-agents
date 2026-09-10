@@ -228,6 +228,21 @@ async function seedTenant(client: Client, slug: string): Promise<TenantFixture> 
        VALUES ($1, '15', 1, 'same_agent', 'verifier_fail', $2)`,
       [id, JSON.stringify({ kind: 'agent', id: `agente-${slug}`, label: `Agente ${slug}` })],
     )
+
+    // Sugerencias del router (migracion 0012). Mismo `task_ref` en los dos
+    // fixtures, por el mismo motivo que las demas: la unicidad es por tenant.
+    // Esto dice a quien se le sugiere el trabajo de un cliente y quien lo acaba
+    // cogiendo, asi que no cruza la frontera.
+    await client.query(
+      `INSERT INTO routing_suggestions
+         (tenant_id, task_ref, suggested_first, entries, model)
+       VALUES ($1, '15', $2, $3, 'claude-opus-5')`,
+      [
+        id,
+        `dev-${slug}`,
+        JSON.stringify([{ rank: 1, candidateId: `dev-${slug}`, leadingSignal: 'ownership' }]),
+      ],
+    )
   })
 
   return { id, slug, userIds, teamId, skillId, installationId }
