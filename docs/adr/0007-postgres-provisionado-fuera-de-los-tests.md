@@ -1,6 +1,8 @@
 # ADR 0007 — El Postgres de los tests de integración se provisiona fuera del proceso de test
 
-**Estado:** Propuesta (implementada y medida en `packages/queue` y `packages/db`; falta `packages/graph`)
+**Estado:** Aceptada · **Fecha:** 10 de septiembre de 2026 · **Issue:** #26
+
+Implementada y medida en `packages/queue` y `packages/db`. Falta `packages/graph`, que sigue fuera del gate de mutation por este mismo motivo.
 
 **Contexto de origen:** issue #26, abierto desde el epic 05 / T03 (issue #23) al
 descubrir que el gate de mutation testing estaba en verde escondiendo mutantes
@@ -96,8 +98,9 @@ topología, no solo tener una URL. Es un único fichero, no está en la lista
 - **No se puede volver a medir deshonestamente sin enterarse.** Es la propiedad
   que se le exigió a este ADR y que hundió a `withReuse()`: o hay servidor
   externo, o `pnpm test:mutation` se niega a correr.
-- Deja de hacer falta `concurrency: 4` fijada en `stryker.config.json`, que hoy
-  está ahí solo para que la cifra sea comparable entre máquinas.
+- ~~Deja de hacer falta `concurrency: 4` fijada en `stryker.config.json`.~~
+  **Corregido el 10 de septiembre de 2026: sigue haciendo falta.** Ver la
+  sección "La concurrencia sí mueve la cifra, y no como se creyó" más abajo.
 - La suite es más rápida para quien levante el compose, sin obligar a nadie.
 
 **Lo que NO se sacrifica, y en la primera versión de este ADR sí:** `pnpm test`
@@ -204,16 +207,35 @@ autor documentó como inalcanzables (`id === null` con la política `standard`),
 opciones difíciles de observar. Escribir tests para eso sería escribir para la
 métrica.
 
-**El gate completo queda en 83,94 %** con los siete módulos dentro.
+**El gate completo quedó en 83,94 %** con los siete módulos que había entonces. Hoy son dieciséis y el agregado sigue por encima del umbral; la cifra viva está en el informe de Stryker, no aquí.
 
-### La concurrencia ya no mueve la cifra
+### La concurrencia sí mueve la cifra, y no como se creyó
 
-Era la razón de fijar `concurrency: 4`. Medido sobre la misma suite, cambiando
-solo ese número: **77,54 %** con 4 workers (8 min 41 s) y **78,81 %** con 12
-(3 min 45 s). **1,27 puntos**, frente a los **33** que se movía antes
-(76,47 → 43,70). El residuo no es la patología de los contenedores: son tests de
-integración con temporización real donde un par de mutantes caen o no según el
-momento. Subir el número en local para ir más rápido es seguro.
+**Esta sección decía lo contrario y estaba mal.** Se escribió midiendo un solo
+módulo, y la conclusión no generalizaba. Se deja el error a la vista porque la
+corrección es la parte útil.
+
+Lo que se midió primero, sobre `packages/queue/src/pg-boss-queue.ts`: **77,54 %**
+con 4 workers (8 min 41 s) y **78,81 %** con 12 (3 min 45 s). **1,27 puntos**,
+frente a los **33** que se movía en la era de los contenedores (76,47 → 43,70).
+De ahí se concluyó que subir workers ya era inocuo.
+
+Lo que se midió después, sobre `packages/db/src/verification-flow.ts`, misma
+suite y cambiando solo ese número:
+
+| Workers | Puntuación  | Timeouts |
+| ------- | ----------- | -------- |
+| 4       | **85,14 %** | **0**    |
+| 12      | 93,24 %     | **39**   |
+
+**Ocho puntos, y 39 timeouts que no causan los mutantes**: los causa la
+contención de 12 procesos contra un solo Postgres. La inflación por timeouts no
+desapareció con los contenedores — **cambió de causa**.
+
+La regla real, entonces: en módulos **puros** subir la concurrencia es seguro; en
+los que tocan base de datos **reintroduce la inflación**. Por eso `concurrency`
+sigue fijada en 4 en el fichero, que además es el tamaño de un runner de CI. El
+comentario de `stryker.config.json` lleva las dos medidas al lado.
 
 **Lo que esto deja pendiente:** `packages/graph`, que sigue con su propio soporte de
 test y 13 ficheros.

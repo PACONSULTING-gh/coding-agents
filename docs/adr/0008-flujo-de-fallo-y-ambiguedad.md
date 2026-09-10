@@ -1,6 +1,6 @@
 # ADR 0008 — El flujo de fallo no es uno: son cuatro modos con tres destinos
 
-**Estado:** Propuesta
+**Estado:** Aceptada · **Fecha:** 10 de septiembre de 2026 · **Issue:** #20 (epic 05, T06)
 
 **Contexto de origen:** epic 05, T06. Cierra la decisión pendiente n.º 4 de
 `.claude/epics/00-indice-y-pendientes.md`, la única que quedaba sin diseñar
@@ -68,9 +68,8 @@ ambiguo, son dos huecos de evidencia.
 
 ### 4. El responsable sale de una cadena, y si no hay se dice
 
-El criterio pide "existe un responsable asignado y notificado". El router es el
-**epic 03 y no está construido**, así que hoy el responsable se resuelve por la
-primera de estas fuentes que dé algo:
+El criterio pide "existe un responsable asignado y notificado". El responsable se
+resuelve por la primera de estas fuentes que dé algo:
 
 1. El **holder del claim activo** sobre la tarea (`claims.ts` ya lo tiene:
    `kind`, `id`, `label`).
@@ -83,8 +82,16 @@ identificado, porque una tarea que falla y no tiene dueño es en sí misma un
 hallazgo que alguien tiene que ver. Inventar un destinatario convierte ese
 hallazgo en un mensaje que alguien ignora por no ir con él.
 
-Cuando exista el router (epic 03), se añade como primera fuente de la cadena y
-nada más cambia.
+**El router del epic 03 NO entra en esta cadena**, y la primera versión de este
+ADR decía que sí. Estaba mal: el router **sugiere**, no asigna, y tratar a su
+candidato como responsable de un escalado sería asignarle trabajo por la puerta
+de atrás — justo lo que el epic 03 prohíbe en su primera línea y lo que dice
+`CLAUDE.md` §2.1.
+
+Lo que sí cabe, y es otra cosa, es que el aviso **mencione** que el router había
+sugerido a alguien, como información para quien lo lea. Informar no es asignar.
+Mientras nadie reclame la tarea ni se asigne el issue, el responsable es "nadie",
+y eso se dice en voz alta.
 
 ### 5. El aviso sale por un puerto, no por GitHub
 
@@ -136,7 +143,8 @@ la tabla es el estado de **dónde está**.
   sabiendas: es más barato que un humano mire una tarea de más a que un agente
   queme cuatro pasadas de `xhigh` sobre un diff grande. Si se demuestra que pasa
   a menudo, subir el tope es cambiar una constante.
-- **El responsable puede ser "nadie"** hasta que exista el epic 03.
+- **El responsable puede ser "nadie"**, y seguirá pudiendo serlo: el router no lo
+  resuelve, porque sugerir no es asignar.
 - **Una tabla más** que mantener y migrar.
 
 **Lo que hay que vigilar:** que `verifier_unavailable` no se convierta en el
