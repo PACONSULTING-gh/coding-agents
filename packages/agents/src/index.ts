@@ -4,14 +4,15 @@
  *
  * Contiene:
  *
- *   * `anthropic.ts` — el adaptador de `LlmPort`
- *     (`packages/core/src/ports/llm.ts`) sobre `@anthropic-ai/sdk`. Es la ruta
- *     de PRODUCCION: el PRD §5 manda las llamadas de la plataforma (router y
- *     Verifier) por API de pago por token.
- *   * `claude-cli.ts` — el mismo `LlmPort` sobre el CLI de Claude Code, para
- *     MEDIR sobre una suscripcion ya pagada. NO es la ruta de produccion: su
+ *   * `claude-cli.ts` — el adaptador de `LlmPort`
+ *     (`packages/core/src/ports/llm.ts`) sobre el CLI de Claude Code. Es la
+ *     ruta de PRODUCCION desde el ADR 0009: todo corre sobre la suscripcion,
+ *     incluidas las llamadas de la plataforma (router y Verifier). Su
  *     aislamiento es una lista negra de herramientas y no una propiedad del
- *     transporte. Lee su cabecera antes de usarlo.
+ *     transporte: lee su cabecera, porque ese es el precio de la decision.
+ *   * `anthropic.ts` — el mismo `LlmPort` sobre `@anthropic-ai/sdk`.
+ *     Implementacion ALTERNATIVA, escrita y probada, para el dia que se dispare
+ *     alguno de los disparadores del ADR 0009. No se usa hoy.
  *   * `routing/shortlist.ts` — T02 del epic 03: la forma del shortlist de
  *     routing y su validacion. Pura y sin LLM: es la defensa que NO depende del
  *     modelo (persona inventada, evidencia inventada, puestos con huecos).

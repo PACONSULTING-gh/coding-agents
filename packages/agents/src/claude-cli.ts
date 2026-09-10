@@ -14,24 +14,25 @@ import {
  * Implementacion de `LlmPort` sobre el CLI de Claude Code (`claude --print`).
  *
  * ===========================================================================
- * PARA QUE EXISTE, Y PARA QUE NO
+ * ESTA ES LA RUTA DE PRODUCCION (ADR 0009)
  * ===========================================================================
- * El PRD (§5, restriccion de coste) dice que las llamadas propias de la
- * plataforma —router y Verifier— van por API de pago por token, y por eso la
- * ruta de PRODUCCION es `anthropic.ts`. Este adaptador NO la sustituye.
+ * Todo corre sobre la suscripcion de Claude Code, incluidas las llamadas
+ * propias de la plataforma: el router y el Verifier pasan por aqui.
  *
- * Existe porque hay un trabajo de desarrollo que estaba bloqueado por no tener
- * credenciales: MEDIR la tasa de falso aprobado del Verifier contra el banco de
- * trampas (cuarto criterio de aceptacion de T04, y linea de la Definition of
- * Done del epic 05). Esa medida hay que hacerla contra un modelo de verdad —un
- * doble solo mediria el doble— y se puede hacer sobre una suscripcion de Claude
- * Code ya pagada en vez de sobre API metrada.
+ * El PRD §5 decia lo contrario hasta el 10 de septiembre de 2026 —router y
+ * Verifier por API de pago por token— y se revisó con el ADR 0009: de sus tres
+ * razones tecnicas, dos no aguantaron la medicion (el CLI tambien devuelve el
+ * consumo por llamada, y la salida estructurada no evita validar), y la tercera
+ * —el aislamiento— se pudo construir y verificar. Ver la seccion siguiente,
+ * porque ese aislamiento es el precio de esta decision.
  *
- * Si algun dia se decide que el CLI sea tambien la ruta de produccion, eso
- * revisa una restriccion del PRD y va por ADR, no por aqui.
+ * `anthropic.ts` sigue existiendo como implementacion alternativa de `LlmPort`,
+ * escrita y probada, para el dia que se dispare alguno de los disparadores del
+ * ADR 0009 (el primero: el primer cliente de pago). Cambiar de ruta es cambiar
+ * que se inyecta en la raiz de composicion.
  *
  * ===========================================================================
- * EL AISLAMIENTO, QUE ES LO QUE ESTE ADAPTADOR TIENE QUE GANARSE
+ * EL AISLAMIENTO: EL PRECIO DE QUE ESTO SEA PRODUCCION
  * ===========================================================================
  * El primer criterio de T04 es que el Verifier no pueda ir a buscarse contexto.
  * Contra la API eso es estructural: un `POST /v1/messages` sin herramientas no
@@ -55,11 +56,18 @@ import {
  * Verificado a mano el 9 de septiembre de 2026 preguntandole al modelo que
  * enumerase sus herramientas: responde `NINGUNA`.
  *
- * DIGAMOSLO CLARO: `BLOCKED_TOOLS` es una LISTA NEGRA contra una superficie que
- * se mueve. Claude Code añade herramientas entre versiones, y una herramienta
- * nueva no estaria en esta lista. `--permission-prompts none` cubre ese hueco
- * denegando lo que no se haya nombrado, pero el modelo aun la VE. Es la razon
- * principal por la que esto no es la ruta de produccion.
+ * DIGAMOSLO CLARO, Y AHORA IMPORTA MAS QUE ANTES: `BLOCKED_TOOLS` es una LISTA
+ * NEGRA contra una superficie que se mueve. Claude Code añade herramientas entre
+ * versiones, y una herramienta nueva no estaria en esta lista.
+ * `--permission-prompts none` cubre ese hueco denegando lo que no se haya
+ * nombrado, pero el modelo aun la VE.
+ *
+ * Contra la API, que el Verifier no pueda buscarse contexto era un HECHO del
+ * transporte. Por aqui es una lista que hay que MANTENER, y el primer criterio
+ * de aceptacion de T04 (epic 05) depende de ella. Si esta lista se queda atras,
+ * el aislamiento se degrada EN SILENCIO — que es el modo de fallo que este
+ * proyecto entero existe para evitar. Es el precio del ADR 0009 y esta escrito
+ * alli tambien.
  *
  * ===========================================================================
  * LO QUE EL CLI NO SABE HACER, Y AQUI NO SE DISIMULA

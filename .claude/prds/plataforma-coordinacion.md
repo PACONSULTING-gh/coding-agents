@@ -84,9 +84,18 @@ problema y hay que replantear, no seguir construyendo.
 - **Equipo:** 3 personas, a tiempo parcial. Todo lo que se pueda comprar en vez
   de construir, se compra.
 - **Coste:** debe correr sobre suscripciones ya pagadas de los agentes de
-  código, no sobre API de pago por token para la generación de código. Las
-  llamadas propias de la plataforma (router, verifier) sí van por API y hay que
-  presupuestarlas.
+  código, no sobre API de pago por token. **Esto incluye las llamadas propias de
+  la plataforma (router, Verifier)**, que corren por el CLI de Claude Code sobre
+  la misma suscripción — ver `docs/adr/0009-todo-sobre-la-suscripcion-de-claude-code.md`.
+
+  Este renglón decía lo contrario hasta el 10 de septiembre de 2026: mandaba
+  router y Verifier por API "y hay que presupuestarlas". Se escribió antes de
+  construir nada, y sus tres razones no aguantaron la medición — el CLI también
+  devuelve el consumo por llamada, la salida estructurada no evita validar, y el
+  aislamiento del Verifier se pudo construir y verificar. Lo que sí se acepta a
+  cambio está en las consecuencias de ese ADR, y no es menor: el aislamiento pasa
+  de ser una propiedad del transporte a una lista de banderas que hay que
+  mantener.
 - **Datos:** código de clientes. Residencia de datos en la UE. Opción
   self-hosted obligatoria para clientes que lo exijan.
 - **Legal:** GDPR/LOPDGDD desde el día uno. DPA listo antes del primer cliente

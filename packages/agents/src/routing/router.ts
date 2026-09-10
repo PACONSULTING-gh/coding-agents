@@ -41,14 +41,22 @@ import {
  * concreto: son dos prompts sin una linea en comun, y lo unico que comparten es
  * pedir razonamiento estructurado con `effort: xhigh`.
  *
- * `claude-sonnet-5` responde con normalidad por esa misma ruta. NO se cambia el
- * defecto a Sonnet: que una limitacion de la ruta de MEDICION decida el modelo
- * de PRODUCCION seria dejar que el instrumento elija la respuesta. Lo que falta
- * para decidirlo es una llamada de humo por API, que cuesta centimos y sigue
- * bloqueada por no haber credenciales (issue #27).
+ * `claude-sonnet-5` responde con normalidad por esa misma ruta.
+ *
+ * HASTA EL ADR 0009 el argumento para dejar el defecto en Opus era que una
+ * limitacion de la ruta de MEDICION no debe decidir el modelo de PRODUCCION.
+ * ESE ARGUMENTO YA NO VALE: el CLI es la ruta de produccion, asi que esto no
+ * es un tropiezo del instrumento sino que el modelo por defecto NO CONTESTA
+ * por el camino que se despliega.
+ *
+ * Aun asi el defecto no se toca aqui, y por otra razon: elegir el modelo del
+ * router es una decision de producto que toma un humano (`CLAUDE.md` §2.1), no
+ * un efecto colateral de un cambio de documentacion. Las dos salidas son
+ * arreglar el prompt o bajar el defecto a Sonnet diciendo por que. Se decide en
+ * el issue #27, que deja de ser una curiosidad y pasa a bloquear.
  */
 
-/** Modelo de produccion. Ver el aviso de arriba sobre el issue #27. */
+/** Modelo por defecto. Ver el aviso de arriba: hoy NO responde (issue #27). */
 export const ROUTER_MODEL = 'claude-opus-5'
 
 /**

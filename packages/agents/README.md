@@ -15,9 +15,15 @@ cualquier otro paquete.
 `ANTHROPIC_API_KEY`.** Nada de aquí se ha ejecutado contra la API de
 Anthropic de verdad, y nada lo intenta.
 
+Desde el **ADR 0009** eso ya no es una laguna en la ruta que se despliega: la
+producción va por el CLI de Claude Code sobre la suscripción (`claude-cli.ts`),
+y `anthropic.ts` es la implementación alternativa. Lo que sigue sin ejercitarse
+contra el servicio real es esa alternativa — y hay que recordarlo el día que un
+disparador del ADR 0009 la ponga en producción, porque estará estrenándose.
+
 Lo que sí está probado, con tests reales:
 
-- El **adaptador HTTP** (`anthropic.ts`, T01) y el **Verifier** (`verifier.ts`,
+- El **adaptador HTTP** (`anthropic.ts`) y el **Verifier** (`verifier.ts`,
   T04) corren contra un **servidor HTTP local** que habla el protocolo de
   eventos de la API (`test/support/fake-anthropic-api.ts`). Eso ejercita la
   traducción de peticiones y respuestas, y todas las reglas de validación —
@@ -33,9 +39,9 @@ Lo que sí está probado, con tests reales:
   pero **no contra el modelo de producción**. Ver la sección siguiente.
 
 Léase: **"los tests están en verde" no significa "probado contra Claude" ni
-"publicado en GitHub".** El primer trabajo real, en cuanto haya credenciales
-y una App registrada, es una llamada de humo contra cada uno de los dos
-servicios.
+"publicado en GitHub".** Contra Claude ya hay una medida real por CLI (sección
+siguiente), que es la ruta que se despliega. Lo que falta es la llamada de humo
+contra **GitHub**, en cuanto haya una App registrada.
 
 ---
 
@@ -55,16 +61,25 @@ Consumo: 12.529 tokens de salida
 **Las tres cosas que esta cifra NO dice, y que hay que decir cada vez que se
 cite:**
 
-1. **No es el modelo de producción.** `VERIFIER_MODEL` es `claude-opus-5`, y
-   por esta ruta **se niega a responder**: el clasificador de seguridad marca
-   la petición del Verifier con la categoría `reasoning_extraction`, 2 de 2
-   intentos, antes de generar un solo token (issue #27). Con `claude-sonnet-5` y el mismo
-   prompt, responde con normalidad. Una tasa de falso aprobado **no es
-   transferible entre modelos**.
-2. **No es la ruta de producción.** El PRD §5 manda las llamadas de la
-   plataforma por API; esto va por CLI, con el aislamiento construido a base
-   de banderas en vez de ser una propiedad del transporte, y sin salida
-   estructurada garantizada por el servidor.
+1. **No es el modelo de producción, y eso ahora es un problema abierto.**
+   `VERIFIER_MODEL` es `claude-opus-5`, y **se niega a responder** por esta
+   ruta: el clasificador de seguridad marca la petición del Verifier con la
+   categoría `reasoning_extraction`, 2 de 2 intentos, antes de generar un solo
+   token (issue #27). Con `claude-sonnet-5` y el mismo prompt responde con
+   normalidad, y una tasa de falso aprobado **no es transferible entre
+   modelos**.
+
+   Hasta el ADR 0009 esto era un estorbo para medir. Ahora que el CLI **es** la
+   ruta de producción, es un bloqueo de producción: el modelo configurado por
+   defecto no contesta por el camino que se despliega. O se arregla el prompt,
+   o `VERIFIER_MODEL` pasa a `claude-sonnet-5` y se dice por qué.
+
+2. ~~**No es la ruta de producción.**~~ **Sí lo es, desde el ADR 0009** (10 de
+   septiembre de 2026): todo corre sobre la suscripción de Claude Code,
+   incluidas las llamadas de la plataforma. Lo que sigue siendo cierto es el
+   matiz: el aislamiento está construido a base de banderas en vez de ser una
+   propiedad del transporte, y no hay salida estructurada garantizada por el
+   servidor. Eso es el precio del ADR 0009, y está escrito allí.
 3. **n = 7.** Seis trampas y un caso limpio. Un 0 % sobre seis muestras no
    significa "no se le cuela nada": el intervalo de confianza es enorme (el
    techo al 95 % ronda el 40 %). Esto es un suelo, una comprobación de que el
