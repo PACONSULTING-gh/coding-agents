@@ -37,6 +37,22 @@ export interface TempRepo {
   remove(relative: string): Promise<void>
   /** Confirma todo lo que haya y devuelve el sha del commit. Autor por defecto: `DEFAULT_AUTHOR`. */
   commit(message: string, author?: { name: string; email: string }): Promise<string>
+  /**
+   * Igual que `commit`, pero fechando el commit en `whenIso` en vez de ahora.
+   *
+   * Sin esto no se puede probar NADA sobre ventanas de historial: todo lo que
+   * crea este helper nace con la fecha de ahora, asi que cualquier `--since`
+   * devuelve todo y un test que "comprueba la ventana" no comprueba nada.
+   *
+   * Y hace falta para el caso feo de verdad: poner un commit VIEJO en la punta
+   * del historial, que es lo que destapa que `--since` para de recorrer en vez
+   * de filtrar (ver `cochange-git.test.ts`).
+   */
+  commitAt(
+    message: string,
+    whenIso: string,
+    author?: { name: string; email: string },
+  ): Promise<string>
   cleanup(): Promise<void>
 }
 
@@ -57,6 +73,20 @@ function repoAt(root: string): TempRepo {
     async commit(message: string, author = DEFAULT_AUTHOR): Promise<string> {
       await run('git', ['-C', root, 'add', '-A'])
       await run('git', ['-C', root, ...identityFlags(author), 'commit', '-q', '-m', message])
+      const { stdout } = await run('git', ['-C', root, 'rev-parse', 'HEAD'])
+      return stdout.trim()
+    },
+
+    async commitAt(message, whenIso, author = DEFAULT_AUTHOR): Promise<string> {
+      await run('git', ['-C', root, 'add', '-A'])
+      await run(
+        'git',
+        ['-C', root, ...identityFlags(author), 'commit', '-q', '-m', message],
+        // Las dos: `GIT_AUTHOR_DATE` es la que mira `--since`, y sin
+        // `GIT_COMMITTER_DATE` el commit quedaria con dos fechas distintas, que
+        // es un estado raro que ningun test quiere estar probando sin querer.
+        { env: { ...process.env, GIT_AUTHOR_DATE: whenIso, GIT_COMMITTER_DATE: whenIso } },
+      )
       const { stdout } = await run('git', ['-C', root, 'rev-parse', 'HEAD'])
       return stdout.trim()
     },
