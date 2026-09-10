@@ -53,12 +53,26 @@ import {
  * es el mismo fallo que equivocarse de persona.
  *
  * ===========================================================================
- * SI EL MODELO SE NIEGA, EL BANCO SE PARA
+ * NO PODER PREGUNTAR Y QUE CONTESTEN UNA GUARRADA SON COSAS DISTINTAS
  * ===========================================================================
  * Una negativa (`LlmRefusalError`, que es lo que hoy hace `claude-opus-5` por
- * la ruta del CLI — issue #27) se propaga y aborta la medida. No se cuenta como
- * fallo ni como acierto: un caso que no se ha podido preguntar no es un dato, y
- * meterlo en el denominador seria inventarse la cifra.
+ * la ruta del CLI — issue #27) o un error de transporte se PROPAGAN y abortan
+ * la medida: un caso que no se ha podido preguntar no es un dato, y meterlo en
+ * el denominador seria inventarse la cifra.
+ *
+ * Una respuesta que el modelo SI dio pero que no pasa la validacion —se invento
+ * a alguien, repitio un puesto, no cito ningun fichero— es otra cosa: es un
+ * dato, y de los buenos. Se anota en `invalidResponses`, cuenta como caso NO
+ * acertado, y el banco sigue. Abortar ahi tiraria las llamadas ya pagadas de
+ * los casos anteriores por un fallo que es justo lo que se quiere contar.
+ *
+ * ===========================================================================
+ * POR QUE CADA CIFRA CUENTA UNA SOLA COSA
+ * ===========================================================================
+ * Una respuesta invalida NO suma a `loadShortcutRate`: la carga no le gano a la
+ * evidencia, es que no hubo respuesta que valorar. Si se mezclaran, el nombre
+ * de la tasa seria mentira. Y no se sacan del denominador, porque entonces un
+ * router podria mejorar su tasa devolviendo basura en los casos dificiles.
  */
 
 export const ROUTING_BENCH_KINDS = ['atajo', 'desempate', 'sin_match'] as const
@@ -86,8 +100,10 @@ export interface RoutingBenchOutcome {
   readonly caseId: string
   readonly title: string
   readonly kind: RoutingBenchKind
-  /** Que respondio: un shortlist o "sin match claro". */
-  readonly answered: RoutingSuggestion['kind']
+  /** Que respondio: un shortlist, "sin match claro", o algo que no valida. */
+  readonly answered: RoutingSuggestion['kind'] | 'invalid'
+  /** Por que no valido, cuando `answered` es `invalid`. */
+  readonly invalidReason: string | undefined
   /** Primer puesto, o `undefined` si dijo `no_match`. */
   readonly topCandidateId: string | undefined
   readonly expectedTop: string | undefined
@@ -117,6 +133,12 @@ export interface RoutingBenchReport {
   readonly fillerRate: number
   /** Acerto la persona y declaro una señal que no la explica. */
   readonly signalMismatches: number
+  /**
+   * Respuestas que el modelo dio y la validacion rechazo. No suman a ninguna de
+   * las tres tasas —no hubo ranking que valorar— pero si cuentan como caso no
+   * acertado, y descalifican tanto como equivocarse de persona.
+   */
+  readonly invalidResponses: number
   readonly usage: LlmUsage
 }
 
@@ -190,14 +212,39 @@ export async function runRoutingBench(
     // Se pregunta a traves de un `LlmPort` que cuenta lo que gasta, para que el
     // consumo del banco salga en el informe: medir cuesta dinero y hay que verlo.
     const contado = new CountingLlm(llm)
-    const suggestion = await suggestAssignees(contado, benchCase.input, options)
+    // Solo se atrapa `ValidationError`, que es lo que lanza la validacion del
+    // shortlist. Una negativa del modelo o un 429 suben con su tipo y matan el
+    // proceso, que es lo correcto: no son respuestas, son ausencias de respuesta.
+    let suggestion: RoutingSuggestion | undefined
+    let invalidReason: string | undefined
+    try {
+      suggestion = await suggestAssignees(contado, benchCase.input, options)
+    } catch (error: unknown) {
+      if (!(error instanceof ValidationError)) throw error
+      invalidReason = error.message
+    }
     models.add(contado.model ?? '(el proveedor no lo declaro)')
     inputTokens += contado.usage.inputTokens
     outputTokens += contado.usage.outputTokens
     cacheRead += contado.usage.cacheReadInputTokens
     cacheCreation += contado.usage.cacheCreationInputTokens
 
-    outcomes.push(scoreCase(benchCase, suggestion))
+    outcomes.push(
+      suggestion === undefined
+        ? {
+            caseId: benchCase.id,
+            title: benchCase.title,
+            kind: benchCase.kind,
+            expectedTop: benchCase.expectedTop,
+            answered: 'invalid',
+            invalidReason,
+            topCandidateId: undefined,
+            correct: false,
+            leadingSignal: undefined,
+            signalMismatch: false,
+          }
+        : scoreCase(benchCase, suggestion),
+    )
   }
 
   const porTipo = (kind: RoutingBenchKind): readonly RoutingBenchOutcome[] =>
@@ -206,9 +253,15 @@ export async function runRoutingBench(
   const atajos = porTipo('atajo')
   const desempates = porTipo('desempate')
   const sinMatch = porTipo('sin_match')
-  const loadShortcuts = atajos.filter((outcome) => !outcome.correct).length
-  const tieBreakMisses = desempates.filter((outcome) => !outcome.correct).length
-  const fillers = sinMatch.filter((outcome) => !outcome.correct).length
+  // `answered !== 'invalid'`: una respuesta que no valida no es un ranking mal
+  // hecho. Cuenta como caso no acertado y se informa aparte, pero mezclarla
+  // aqui haria que el nombre de la tasa fuese falso.
+  const malRanqueados = (de: readonly RoutingBenchOutcome[]): readonly RoutingBenchOutcome[] =>
+    de.filter((outcome) => !outcome.correct && outcome.answered !== 'invalid')
+
+  const loadShortcuts = malRanqueados(atajos).length
+  const tieBreakMisses = malRanqueados(desempates).length
+  const fillers = malRanqueados(sinMatch).length
 
   return {
     // Ningun denominador puede ser cero: `assertBenchIsUsable` exige los tres tipos.
@@ -221,6 +274,7 @@ export async function runRoutingBench(
     fillers,
     fillerRate: fillers / sinMatch.length,
     signalMismatches: outcomes.filter((outcome) => outcome.signalMismatch).length,
+    invalidResponses: outcomes.filter((outcome) => outcome.answered === 'invalid').length,
     usage: {
       inputTokens,
       outputTokens,
@@ -245,6 +299,7 @@ function scoreCase(
     return {
       ...base,
       answered: 'no_match',
+      invalidReason: undefined,
       topCandidateId: undefined,
       // Decir "no hay match" es correcto SOLO en los casos `sin_match`. En un
       // `atajo` es rendirse teniendo delante a alguien con evidencia clara.
@@ -260,6 +315,7 @@ function scoreCase(
   return {
     ...base,
     answered: 'shortlist',
+    invalidReason: undefined,
     topCandidateId: primero?.candidateId,
     correct,
     leadingSignal: primero?.leadingSignal,
@@ -319,6 +375,8 @@ export function formatRoutingBenchReport(report: RoutingBenchReport): string {
     `Relleno:             ${percent(report.fillerRate)} ` +
       `(${String(report.fillers)} casos donde forzo un candidato sin haberlo)`,
     `Señal mal declarada: ${String(report.signalMismatches)}`,
+    `Respuestas invalidas: ${String(report.invalidResponses)} ` +
+      '(el modelo contesto, y la validacion lo rechazo)',
     '',
     'Caso a caso:',
   ]
@@ -329,6 +387,9 @@ export function formatRoutingBenchReport(report: RoutingBenchReport): string {
         `esperado=${outcome.expectedTop ?? '(nadie)'} señal=${outcome.leadingSignal ?? '-'}` +
         `${outcome.signalMismatch ? ' <- señal que no lo explica' : ''}`,
     )
+    if (outcome.invalidReason !== undefined) {
+      lines.push(`        rechazada: ${outcome.invalidReason}`)
+    }
   }
   lines.push(
     '',

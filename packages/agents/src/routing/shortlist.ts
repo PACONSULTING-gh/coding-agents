@@ -94,60 +94,17 @@ export type RoutingSuggestion =
   /** Sin match claro. Es una respuesta legitima y esperada, no un fallo. */
   | { readonly kind: 'no_match'; readonly reason: string }
 
-// ---------------------------------------------------------------------------
-// El esquema que se le pide al modelo
-// ---------------------------------------------------------------------------
-
-export const ROUTING_OUTPUT_SCHEMA: Readonly<Record<string, unknown>> = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['outcome'],
-  properties: {
-    outcome: {
-      type: 'string',
-      enum: ['shortlist', 'no_match'],
-      description: 'Usa `no_match` si ningun candidato encaja. Es una respuesta valida.',
-    },
-    noMatchReason: {
-      type: 'string',
-      description: 'Obligatorio con `no_match`: por que ninguno encaja.',
-    },
-    candidates: {
-      type: 'array',
-      description: `Entre ${String(MIN_CANDIDATES)} y ${String(MAX_CANDIDATES)} candidatos con \`shortlist\`.`,
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        // El orden de las claves es el orden de generacion: primero el
-        // razonamiento, despues la evidencia, y el puesto AL FINAL. Es
-        // deliberado, igual que en el Verifier: si el puesto se generase
-        // primero, el razonamiento seria una justificacion a posteriori.
-        required: ['candidateId', 'reasoning', 'evidenceFiles', 'leadingSignal', 'rank'],
-        properties: {
-          candidateId: {
-            type: 'string',
-            description: 'Id EXACTO de la lista dada. No lo inventes.',
-          },
-          reasoning: {
-            type: 'string',
-            description: 'Por que este candidato, antes de decidir su puesto.',
-          },
-          evidenceFiles: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Rutas EXACTAS de los ficheros que sostienen la sugerencia.',
-          },
-          leadingSignal: { type: 'string', enum: [...LEADING_SIGNALS] },
-          rank: { type: 'number', description: '1 es el mas recomendado.' },
-        },
-      },
-    },
-  },
-}
-
+/**
+ * El esquema de la frontera, y EL UNICO SITIO DONDE SE NORMALIZA.
+ *
+ * Los `.trim()` estan aqui y no repartidos por la validacion de abajo a
+ * proposito: normalizar en dos sitios significa que un dia uno de los dos se
+ * queda atras. Todo lo que sale de este `parse` viene ya recortado, asi que la
+ * validacion mide lo que hay y no lo que ocupa.
+ */
 const rawSchema = z.object({
   outcome: z.enum(['shortlist', 'no_match']),
-  noMatchReason: z.string().optional(),
+  noMatchReason: z.string().trim().optional(),
   candidates: z
     .array(
       z.object({
@@ -183,7 +140,7 @@ export function parseRoutingSuggestion(raw: unknown, input: RoutingInput): Routi
   const data = parsed.data
 
   if (data.outcome === 'no_match') {
-    const reason = data.noMatchReason?.trim() ?? ''
+    const reason = data.noMatchReason ?? ''
     if (reason.length < MIN_ROUTING_REASONING_LENGTH) {
       // "No hay match" sin explicacion no le sirve a quien tiene que repartir
       // la tarea igualmente: necesita saber si es que falta gente con contexto
@@ -227,11 +184,22 @@ export function parseRoutingSuggestion(raw: unknown, input: RoutingInput): Routi
     }
     vistos.add(candidato.candidateId)
 
-    if (candidato.reasoning.trim().length < MIN_ROUTING_REASONING_LENGTH) {
+    if (candidato.reasoning.length < MIN_ROUTING_REASONING_LENGTH) {
       throw new ValidationError(
-        `El razonamiento de "${candidato.candidateId}" tiene ${String(candidato.reasoning.trim().length)} ` +
+        `El razonamiento de "${candidato.candidateId}" tiene ${String(candidato.reasoning.length)} ` +
           `caracteres y el minimo son ${String(MIN_ROUTING_REASONING_LENGTH)}. Un shortlist que no se explica ` +
           'no se puede anular con criterio, que es justo lo que tiene que hacer el humano.',
+      )
+    }
+
+    if (candidato.evidenceFiles.length === 0) {
+      // Mentira 2 por el otro lado: no citar nada. El criterio de aceptacion
+      // pide "una razon y su evidencia mas fuerte", y una entrada sin ficheros
+      // no se puede contrastar con nada — es justo el hueco que deja abierta la
+      // comprobacion de ficheros inventados si uno decide no citar ninguno.
+      throw new ValidationError(
+        `El router sugirio a "${candidato.candidateId}" sin citar ningun fichero que lo sostenga. ` +
+          'Una sugerencia que no se apoya en nada no se puede contrastar.',
       )
     }
 
@@ -254,7 +222,7 @@ export function parseRoutingSuggestion(raw: unknown, input: RoutingInput): Routi
     entries.push({
       rank: candidato.rank,
       candidateId: candidato.candidateId,
-      reasoning: candidato.reasoning.trim(),
+      reasoning: candidato.reasoning,
       evidenceFiles: candidato.evidenceFiles,
       leadingSignal: candidato.leadingSignal,
     })

@@ -1,4 +1,4 @@
-import { ValidationError, type LlmPort, type LlmResult } from '@coord/core'
+import { LlmRefusalError, ValidationError, type LlmPort, type LlmResult } from '@coord/core'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -43,8 +43,8 @@ function resultado(structured: unknown): LlmResult {
     usage: {
       inputTokens: 10,
       outputTokens: 5,
-      cacheReadInputTokens: 0,
-      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 3,
+      cacheCreationInputTokens: 2,
     },
   }
 }
@@ -81,18 +81,33 @@ function acierto(benchCase: RoutingBenchCase, signal: string): unknown {
   const candidates = benchCase.input.candidates
   const primero = candidates.find((c) => c.id === benchCase.expectedTop)
   if (primero === undefined) throw new Error(`el caso ${benchCase.id} no trae a su esperado`)
-  return shortlistDe([primero, ...candidates.filter((c) => c !== primero)], signal)
+  return shortlistDe(
+    [primero, ...candidates.filter((c) => c !== primero)],
+    signal,
+    benchCase.input.files,
+  )
 }
 
 const RAZON = 'Razonamiento de relleno, suficientemente largo para pasar el minimo exigido.'
 
-function shortlistDe(ordenados: readonly RoutingCandidate[], signal: string): unknown {
+function shortlistDe(
+  ordenados: readonly RoutingCandidate[],
+  signal: string,
+  ficheros: readonly string[],
+): unknown {
   return {
     outcome: 'shortlist',
     candidates: ordenados.slice(0, 2).map((candidate, indice) => ({
       candidateId: candidate.id,
       reasoning: RAZON,
-      evidenceFiles: candidate.ownership.map((o) => o.path),
+      // Si no tiene autoria en ningun sitio, cita el fichero de la tarea: no es
+      // evidencia, pero es lo que citaria un router que rellena. La validacion
+      // lo dejara pasar y el banco lo puntuara como lo que es, un fallo de
+      // ranking — que es distinto de una respuesta que no valida.
+      evidenceFiles:
+        candidate.ownership.length > 0
+          ? candidate.ownership.map((o) => o.path)
+          : [...ficheros].slice(0, 1),
       leadingSignal: signal,
       rank: indice + 1,
     })),
@@ -105,6 +120,7 @@ function porLineas(cases: readonly RoutingBenchCase[]): LlmPort {
     shortlistDe(
       [...input.candidates].sort((a, b) => lineasTotales(b) - lineasTotales(a)),
       'ownership',
+      input.files,
     ),
   )
 }
@@ -115,6 +131,7 @@ function porCarga(cases: readonly RoutingBenchCase[]): LlmPort {
     shortlistDe(
       [...input.candidates].sort((a, b) => a.workload - b.workload),
       'workload',
+      input.files,
     ),
   )
 }
@@ -138,6 +155,7 @@ describe('el banco suspende a los routers degenerados', () => {
     expect(report.loadShortcutRate).toBe(0)
     expect(report.tieBreakMissRate).toBe(1)
     expect(report.fillerRate).toBe(1)
+    expect(report.invalidResponses).toBe(0)
   })
 
   it('el que ordena por carga es justo el fallo que el epic existe para evitar', async () => {
@@ -145,6 +163,9 @@ describe('el banco suspende a los routers degenerados', () => {
 
     expect(report.loadShortcutRate).toBe(1)
     expect(report.fillerRate).toBe(1)
+    // Ranquea mal, pero devuelve shortlists validos: equivocarse de persona y
+    // contestar una guarrada son fallos distintos y no se mezclan.
+    expect(report.invalidResponses).toBe(0)
   })
 
   it('el que nunca sugiere a nadie no comete relleno, y no sirve para nada', async () => {
@@ -153,6 +174,41 @@ describe('el banco suspende a los routers degenerados', () => {
     expect(report.fillerRate).toBe(0)
     expect(report.loadShortcutRate).toBe(1)
     expect(report.tieBreakMissRate).toBe(1)
+  })
+
+  it('una respuesta que no valida se anota y el banco sigue, en vez de morirse', async () => {
+    // Abortar ahi tiraria las llamadas ya pagadas de los casos anteriores por
+    // un fallo que es justo lo que se quiere contar.
+    const llm = estrategia(ROUTING_BENCH_CASES, () => ({
+      outcome: 'shortlist',
+      candidates: [
+        {
+          candidateId: 'fantasma',
+          reasoning: RAZON,
+          evidenceFiles: [],
+          leadingSignal: 'ownership',
+          rank: 1,
+        },
+      ],
+    }))
+
+    const report = await runRoutingBench(llm, ROUTING_BENCH_CASES)
+
+    expect(report.invalidResponses).toBe(ROUTING_BENCH_CASES.length)
+    expect(report.cases.every((outcome) => outcome.correct)).toBe(false)
+    // No se reparte entre las tasas: no hubo ranking que valorar.
+    expect(report.loadShortcutRate).toBe(0)
+    expect(report.cases[0]?.invalidReason).toContain('candidatos')
+  })
+
+  it('una negativa del modelo SI mata la medida: no es una respuesta', async () => {
+    // Un caso que no se ha podido preguntar no es un dato, y meterlo en el
+    // denominador seria inventarse la cifra.
+    const llm: LlmPort = {
+      complete: () => Promise.reject(new LlmRefusalError({ category: 'reasoning_extraction' })),
+    }
+
+    await expect(runRoutingBench(llm, ROUTING_BENCH_CASES)).rejects.toBeInstanceOf(LlmRefusalError)
   })
 })
 
@@ -192,6 +248,30 @@ describe('el banco cuenta lo que dice contar', () => {
 
     expect(report.usage.inputTokens).toBe(10 * ROUTING_BENCH_CASES.length)
     expect(report.usage.outputTokens).toBe(5 * ROUTING_BENCH_CASES.length)
+    // Los del cache tambien: son los que dicen si el bloque estatico del prompt
+    // se esta reutilizando, que es de donde sale casi todo el ahorro.
+    expect(report.usage.cacheReadInputTokens).toBe(3 * ROUTING_BENCH_CASES.length)
+    expect(report.usage.cacheCreationInputTokens).toBe(2 * ROUTING_BENCH_CASES.length)
+  })
+
+  it('el informe imprime las tasas en tanto por ciento, no en crudo', async () => {
+    const report = await runRoutingBench(porCarga(ROUTING_BENCH_CASES), ROUTING_BENCH_CASES)
+
+    expect(formatRoutingBenchReport(report)).toContain('Atajo de carga:      100.0%')
+  })
+
+  it('no se inventa un desacuerdo de señal cuando el caso no dice cual esperaba', async () => {
+    const sinSeñal: readonly RoutingBenchCase[] = ROUTING_BENCH_CASES.map((c) => {
+      if (c.kind === 'sin_match' || c.expectedTop === undefined) return c
+      // Se quita `expectedSignal` y se deja el resto: el caso sigue diciendo a
+      // quien espera, pero no que señal deberia explicarlo.
+      return { id: c.id, title: c.title, kind: c.kind, input: c.input, expectedTop: c.expectedTop }
+    })
+    const llm = estrategia(sinSeñal, (benchCase) => acierto(benchCase, 'workload'))
+
+    const report = await runRoutingBench(llm, sinSeñal)
+
+    expect(report.signalMismatches).toBe(0)
   })
 
   it('el informe empieza diciendo contra que modelo se midio', async () => {
@@ -206,42 +286,64 @@ describe('el banco se niega a medir con casos que no miden', () => {
   const soloDeUnTipo = (kind: RoutingBenchCase['kind']): readonly RoutingBenchCase[] =>
     ROUTING_BENCH_CASES.filter((c) => c.kind === kind)
 
+  it('se niega con un banco vacio', async () => {
+    await expect(runRoutingBench(porLineas([]), [])).rejects.toThrow(/esta vacio/)
+  })
+
   it.each(['atajo', 'desempate', 'sin_match'] as const)(
-    'se niega si solo hay casos de tipo %s',
+    'se niega si solo hay casos de tipo %s, y dice cual falta',
     async (kind) => {
-      const error = await runRoutingBench(porLineas(soloDeUnTipo(kind)), soloDeUnTipo(kind)).catch(
+      const casos = soloDeUnTipo(kind)
+      const error: unknown = await runRoutingBench(porLineas(casos), casos).catch(
         (caught: unknown) => caught,
       )
       expect(error).toBeInstanceOf(ValidationError)
+      if (!(error instanceof ValidationError)) throw new Error('deberia haber lanzado')
+      // Que diga QUE tipo falta, y no solo que falta algo: es la diferencia
+      // entre un error accionable y uno que obliga a abrir el codigo.
+      const faltan = ['atajo', 'desempate', 'sin_match'].filter((otro) => otro !== kind)
+      expect(faltan.some((otro) => error.message.includes(`"${otro}"`))).toBe(true)
+      expect(error.message).not.toContain(`"${kind}"`)
     },
   )
+
+  it('se niega si un caso no trae candidatos suficientes para contestarlo bien', async () => {
+    const roto: readonly RoutingBenchCase[] = ROUTING_BENCH_CASES.map((c) =>
+      c.kind === 'atajo'
+        ? { ...c, input: { ...c.input, candidates: c.input.candidates.slice(0, 1) } }
+        : c,
+    )
+    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toThrow(/candidato\(s\)/)
+  })
 
   it('se niega si un caso no dice a quien espera primero', async () => {
     const roto: readonly RoutingBenchCase[] = ROUTING_BENCH_CASES.map((c) =>
       c.kind === 'atajo' ? { id: c.id, title: c.title, kind: c.kind, input: c.input } : c,
     )
-    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toBeInstanceOf(ValidationError)
+    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toThrow(/no dice a quien espera/)
   })
 
   it('se niega si un caso espera a alguien que no esta entre sus candidatos', async () => {
     const roto = ROUTING_BENCH_CASES.map((c) =>
       c.kind === 'atajo' ? { ...c, expectedTop: 'fantasma' } : c,
     )
-    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toBeInstanceOf(ValidationError)
+    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toThrow(/"fantasma"/)
   })
 
   it('se niega si un caso "sin_match" ademas dice a quien espera', async () => {
     const roto = ROUTING_BENCH_CASES.map((c) =>
       c.kind === 'sin_match' ? { ...c, expectedTop: 'nuria' } : c,
     )
-    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toBeInstanceOf(ValidationError)
+    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toThrow(
+      /ademas dice a quien espera/,
+    )
   })
 
   it('se niega si dos casos tienen el mismo id', async () => {
     const primero = ROUTING_BENCH_CASES[0]
     if (primero === undefined) throw new Error('el banco esta vacio')
     const roto = [...ROUTING_BENCH_CASES, primero]
-    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toBeInstanceOf(ValidationError)
+    await expect(runRoutingBench(porLineas(roto), roto)).rejects.toThrow(/el mismo id/)
   })
 })
 
