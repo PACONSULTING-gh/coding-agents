@@ -4,7 +4,10 @@ name: Mutation testing
 # lento y correrlo en cada PR seria exactamente el ruido que CLAUDE.md 2.4
 # quiere evitar. Corre programado (semanal) o a mano desde la pestana Actions.
 # Se anade a `ci-ok` (bloqueo por PR) cuando los modulos criticos se
-# estabilicen; packages/graph sigue sin estarlo, medido en stryker.config.json.
+# estabilicen. Desde el 11 de septiembre de 2026 packages/graph ya esta en la
+# lista (issue #26): adopto el ADR 0007 y sus cinco modulos con decisiones miden
+# entre 67 y 85 con practicamente ningun timeout. Lo que sigue fuera es
+# `parse/*`, con su cifra real anotada en stryker.config.json.
 #
 # LO QUE SI ES BLOQUEANTE YA (Epic 05 / T03, Issue #23): la EJECUCION de este
 # workflow, cuando corre. Antes el paso de abajo llevaba `continue-on-error:

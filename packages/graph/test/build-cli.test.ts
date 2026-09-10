@@ -106,7 +106,7 @@ describe.skipIf(!HABILITADO)('ingesta de build contra las CLI reales de Nx y Tur
   afterAll(async () => {
     await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })))
     await closeDatabase()
-    await db?.container.stop()
+    await db?.stop()
   })
 
   it('un workspace con Nx de verdad aporta aristas `build`', async () => {

@@ -31,7 +31,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await closeDatabase()
-  await db?.container.stop()
+  await db?.stop()
 })
 
 describe('una consulta de afectados que mezcla estatico, build y co-change', () => {

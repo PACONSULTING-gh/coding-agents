@@ -1,7 +1,12 @@
-import { randomBytes } from 'node:crypto'
-
-import { migrate } from '@coord/db/migrate'
-import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql'
+import {
+  bootstrapSchema,
+  POSTGRES_IMAGE as SHARED_POSTGRES_IMAGE,
+} from '../../../db/test/support/database.js'
+import {
+  createTestDatabase,
+  sharedPostgresServer,
+  type TestDatabase,
+} from '../../../db/test/support/postgres-server.js'
 
 /**
  * Postgres DE VERDAD para los tests del grafo, con la MISMA separacion de roles
@@ -11,125 +16,74 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
  * comportamiento del motor. Un doble solo demostraria que el doble hace lo que
  * le hemos dicho.
  *
- * ---------------------------------------------------------------------------
- * POR QUE `psql` DENTRO DEL CONTENEDOR Y NO UN CLIENTE `pg`
- * ---------------------------------------------------------------------------
- * Motivo arquitectonico, no de comodidad: la fitness function `pg-solo-en-db`
- * reserva el driver `pg` a packages/db. Este paquete no adquiere acceso directo
- * a Postgres ni siquiera en sus tests; para las dos cosas que no puede hacer la
- * capa de acceso (asignar contrasenas a los roles y un `ANALYZE`) se usa el
- * `psql` que ya trae la imagen. Es el mismo patron que
- * `packages/queue/test/postgres.ts`.
+ * ===========================================================================
+ * UNA BASE DE DATOS POR FICHERO, NO UN CONTENEDOR (ADR 0007, issue #26)
+ * ===========================================================================
+ * Hasta ahora cada uno de los 13 ficheros de test de este paquete levantaba su
+ * propio contenedor. Bajo mutation testing eso salia a UN CONTENEDOR POR
+ * MUTANTE, y la consecuencia no era solo lentitud: medido sobre
+ * `parse/python.ts` daban 0 mutantes muertos, 229 timeouts y una puntuacion de
+ * 78,69 que superaba el umbral SIN QUE NINGUN TEST HUBIERA MATADO NADA. Un
+ * gate que se supera por timeouts es peor que no medir, porque parece que mide.
  *
- * ---------------------------------------------------------------------------
+ * Ahora se comparte el servidor del proceso y cada fichero crea SU base de
+ * datos dentro. El aislamiento entre ficheros sigue siendo total —son bases
+ * distintas— y el coste de arranque pasa de N contenedores a uno.
+ *
+ * ===========================================================================
+ * POR QUE SE REUSA EL SOPORTE DE packages/db
+ * ===========================================================================
+ * Porque el bootstrap de roles es delicado —advisory lock incluido, porque los
+ * roles son objetos de CLUSTER y varios ficheros a la vez chocan con `tuple
+ * concurrently updated`— y tenerlo en dos sitios significa que el dia que
+ * cambie habra que acordarse de los dos.
+ *
+ * La fitness function `pg-solo-en-db` sigue cumpliendose: este fichero no
+ * importa `pg`. El driver vive donde debe, en packages/db, y aqui se usa a
+ * traves de su soporte de test.
+ *
+ * ===========================================================================
  * POR QUE HACEN FALTA DOS ROLES
- * ---------------------------------------------------------------------------
+ * ===========================================================================
  * `app_migrator` es el DUENO de las tablas y `app_runtime` el que consulta. Si
- * los tests se conectaran como el superusuario del contenedor, se saltarian la
- * RLS por atributo de rol y el test de aislamiento entre tenants pasaria por
+ * los tests se conectaran como el superusuario, se saltarian la RLS por
+ * atributo de rol y el test de aislamiento entre tenants pasaria por
  * casualidad, sin comprobar nada.
  */
 
-export const POSTGRES_IMAGE = 'postgres:16-alpine'
+export const POSTGRES_IMAGE = SHARED_POSTGRES_IMAGE
 
 export interface StartedDatabase {
-  container: StartedPostgreSqlContainer
   /** Conexion del rol de la aplicacion: la que usa `configureDatabase`. */
-  runtimeUrl: string
+  readonly runtimeUrl: string
   /** Conexion del rol de migraciones (dueno del esquema). */
-  migratorUrl: string
-}
-
-/**
- * Contrasena aleatoria por ejecucion. En el repositorio no hay ninguna
- * contrasena, ni siquiera de test (CLAUDE.md 5). Hexadecimal a proposito:
- * `ALTER ROLE ... PASSWORD` no admite parametros y hay que interpolar, asi que
- * el juego de caracteres se restringe a uno que no puede escapar de la cadena.
- */
-function generatePassword(): string {
-  return randomBytes(24).toString('hex')
-}
-
-function assertHex(password: string): void {
-  if (!/^[0-9a-f]+$/.test(password)) {
-    throw new Error('La contrasena generada debe ser hexadecimal para poder interpolarse en SQL.')
-  }
-}
-
-function connectionUrl(
-  container: StartedPostgreSqlContainer,
-  user: string,
-  password: string,
-): string {
-  assertHex(password)
-  return `postgres://${user}:${password}@${container.getHost()}:${String(container.getPort())}/${container.getDatabase()}`
-}
-
-/**
- * Ejecuta SQL con el `psql` de la imagen, como superusuario del contenedor.
- *
- * Solo para lo que la capa de acceso no puede hacer: `ALTER ROLE` y `ANALYZE`.
- * NUNCA para comprobar aislamiento — el superusuario se salta la RLS, asi que
- * cualquier assert de aislamiento hecho por aqui seria falso.
- */
-export async function psql(container: StartedPostgreSqlContainer, text: string): Promise<string[]> {
-  const result = await container.exec(
-    [
-      'psql',
-      '-v',
-      'ON_ERROR_STOP=1',
-      '-U',
-      container.getUsername(),
-      '-d',
-      container.getDatabase(),
-      '-tA',
-      '-c',
-      text,
-    ],
-    { env: { PGPASSWORD: container.getPassword() } },
-  )
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `psql termino con codigo ${String(result.exitCode)}: ${result.stderr || result.output}\nSQL: ${text}`,
-    )
-  }
-  return result.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '')
+  readonly migratorUrl: string
+  /**
+   * SQL como superusuario sobre la base de este fichero.
+   *
+   * Solo para lo que la capa de acceso no puede hacer: hoy, un `ANALYZE` en el
+   * test de rendimiento, que exige ser dueno de la tabla. NUNCA para comprobar
+   * aislamiento — el superusuario se salta la RLS, asi que cualquier assert de
+   * aislamiento hecho por aqui seria falso.
+   */
+  sql(text: string, values?: readonly unknown[]): Promise<Record<string, unknown>[]>
+  /** Borra la base de datos de este fichero. Antes esto paraba un contenedor. */
+  stop(): Promise<void>
 }
 
 export async function startDatabase(): Promise<StartedDatabase> {
-  const container = await new PostgreSqlContainer(POSTGRES_IMAGE).start()
-
-  // Paso 1: bootstrap de roles, con el rol privilegiado y SOLO la migracion 0001.
-  const superUrl = container.getConnectionUri()
-  const bootstrapped = await migrate({ databaseUrl: superUrl, direction: 'up', count: 1 })
-  if (bootstrapped[0] !== '0001_bootstrap_roles_and_extensions') {
-    throw new Error(`Bootstrap inesperado: ${bootstrapped.join(', ')}`)
-  }
-
-  // Paso 2: contrasenas fuera de banda, como en produccion.
-  const migratorPassword = generatePassword()
-  const runtimePassword = generatePassword()
-  assertHex(migratorPassword)
-  assertHex(runtimePassword)
-  await psql(container, `ALTER ROLE app_migrator WITH PASSWORD '${migratorPassword}'`)
-  await psql(container, `ALTER ROLE app_runtime  WITH PASSWORD '${runtimePassword}'`)
-
-  // Paso 3: el resto de migraciones las aplica app_migrator, que queda como
-  // dueno de las tablas. Sin eso, `FORCE ROW LEVEL SECURITY` no se ejercitaria.
-  const migratorUrl = connectionUrl(container, 'app_migrator', migratorPassword)
-  const applied = await migrate({ databaseUrl: migratorUrl, direction: 'up' })
-  if (!applied.includes('0007_graph_nodes_and_edges')) {
-    throw new Error(
-      `La migracion del grafo no se aplico. Aplicadas: ${applied.join(', ') || '(ninguna)'}`,
-    )
-  }
+  const server = await sharedPostgresServer()
+  const test: TestDatabase = await createTestDatabase('graph')
+  const { migratorUrl, runtimeUrl } = await bootstrapSchema(
+    test.url,
+    test.adminUrl,
+    server.adminUrl,
+  )
 
   return {
-    container,
-    runtimeUrl: connectionUrl(container, 'app_runtime', runtimePassword),
+    runtimeUrl,
     migratorUrl,
+    sql: (text, values) => test.sql(text, values),
+    stop: () => test.drop(),
   }
 }

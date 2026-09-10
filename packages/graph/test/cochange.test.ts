@@ -35,7 +35,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await Promise.all(repos.map((repo) => repo.cleanup()))
   await closeDatabase()
-  await db?.container.stop()
+  await db?.stop()
 })
 
 async function newRepo(prefix: string): Promise<TempRepo> {
