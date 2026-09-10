@@ -69,7 +69,16 @@ function lineaDeResponsable(notice: EscalationNotice): string {
     // Una tarea que falla y no tiene dueño es en si misma un hallazgo. Elegir a
     // alguien plausible lo convertiria en un mensaje que se ignora por no ir
     // con quien lo recibe.
-    return '**Sin responsable identificado.** No hay claim activo ni assignee en el issue: alguien tiene que hacerse cargo de esto.'
+    //
+    // El motivo lo pone quien RESOLVIO (o no) al responsable, porque es el
+    // unico que lo sabe. La frase generica se queda como respaldo, pero no se
+    // afirma en ella nada concreto: decir "no hay assignee" cuando en realidad
+    // hay tres co-asignados seria mentir en el unico mensaje que alguien va a
+    // leer.
+    const motivo = notice.unresolvedReason?.trim()
+    const porQue =
+      motivo === undefined || motivo === '' ? 'No se ha podido determinar quien responde' : motivo
+    return `**Sin responsable identificado.** ${porQue}: alguien tiene que hacerse cargo de esto.`
   }
   if (notice.mention !== undefined && notice.mention.trim() !== '') {
     return `**Responsable:** @${notice.mention.trim()} (${responsable.label})`
