@@ -35,6 +35,14 @@ export interface HandleVerificationOutcomeInput extends RecordOutcomeInput {
    * adivina (ver la cabecera de `escalation-notification.ts`).
    */
   readonly mention?: string
+  /**
+   * POR QUE no hay responsable, cuando `responsible` viene vacio. Lo aporta
+   * `resolveResponsible`, que es quien lo sabe: "nadie asignado" y "tres
+   * co-asignados y ninguno es EL responsable" acaban los dos en `undefined`, y
+   * sin este campo el aviso imprimiria la misma frase para los dos — una de
+   * ellas falsa.
+   */
+  readonly unresolvedReason?: string
   /** El informe de conformidad, si esta pasada llego a producir uno. */
   readonly reportMarkdown?: string
 }
@@ -90,6 +98,7 @@ export async function handleVerificationOutcome(
       maxAttempts: input.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
       ...(input.responsible === undefined ? {} : { responsible: input.responsible }),
       ...(input.mention === undefined ? {} : { mention: input.mention }),
+      ...(input.unresolvedReason === undefined ? {} : { unresolvedReason: input.unresolvedReason }),
       ...(input.headSha === undefined ? {} : { headSha: input.headSha }),
       ...(input.reportMarkdown === undefined ? {} : { reportMarkdown: input.reportMarkdown }),
     })

@@ -68,6 +68,8 @@ export type {
 } from './installations.js'
 
 export { publishPullRequestComment } from './pull-request-comments.js'
+export { readIssueAssignees } from './issue-assignees.js'
+export type { IssueAssigneesTarget } from './issue-assignees.js'
 export {
   GitHubEscalationNotifier,
   renderEscalationComment,

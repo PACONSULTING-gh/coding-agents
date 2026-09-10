@@ -310,6 +310,15 @@ export interface EscalationNotice {
   /** `undefined` cuando no se ha podido identificar a nadie. Se dice en el aviso. */
   readonly responsible?: Responsible
   /**
+   * POR QUE no hay responsable, cuando no lo hay.
+   *
+   * No es adorno: "no hay nadie asignado" y "hay tres co-asignados y ninguno es
+   * EL responsable" son situaciones distintas con remedios distintos, y sin
+   * este campo las dos se imprimirian con la misma frase — una de ellas falsa.
+   * Un aviso que afirma algo que no es cierto es peor que uno escueto.
+   */
+  readonly unresolvedReason?: string
+  /**
    * Como se menciona al responsable en el canal de destino (en GitHub, su
    * login sin la arroba).
    *

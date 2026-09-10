@@ -261,6 +261,27 @@ describe('el aviso que sale por el puerto lleva exactamente lo que hay', () => {
    * Mandar `{ headSha: undefined }` cuando no hay SHA no es lo mismo que no
    * mandar la clave, y la diferencia solo se ve desde el otro lado.
    */
+  it('el motivo de "sin responsable" llega hasta el aviso', async () => {
+    // Sin este reenvio, `resolveResponsible` podria distinguir perfectamente
+    // "nadie" de "tres co-asignados" y el aviso seguiria diciendo lo mismo para
+    // los dos. La distincion solo sirve si sobrevive el viaje.
+    const notificaciones = new NotificadorDePrueba()
+    const taskRef = nuevaTarea()
+
+    await runWithTenant({ tenantId, actorId }, () =>
+      handleVerificationOutcome(
+        {
+          taskRef,
+          outcome: 'verifier_unavailable',
+          unresolvedReason: 'el issue tiene 3 personas asignadas',
+        },
+        { notifications: notificaciones, logger },
+      ),
+    )
+
+    expect(notificaciones.avisos[0]?.unresolvedReason).toBe('el issue tiene 3 personas asignadas')
+  }, 90_000)
+
   it('sin datos opcionales, el aviso no lleva claves vacias', async () => {
     const notificaciones = new NotificadorDePrueba()
     const taskRef = nuevaTarea()

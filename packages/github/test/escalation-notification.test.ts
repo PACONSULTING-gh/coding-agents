@@ -72,6 +72,32 @@ describe('a quien va dirigido', () => {
     expect(texto).toContain('alguien tiene que hacerse cargo')
     expect(texto).not.toContain('@')
   })
+
+  it('cuando hay MOTIVO, el aviso lo dice en vez de afirmar algo generico', () => {
+    // El caso que obliga a que exista este campo: con tres co-asignados, decir
+    // "no hay assignee en el issue" seria FALSO. Un aviso que afirma algo que
+    // no es cierto es peor que uno escueto, porque quien lo lee actua sobre el.
+    const texto = renderEscalationComment({
+      ...BASE,
+      unresolvedReason:
+        'No hay claim activo sobre issue-42 y el issue tiene 3 personas asignadas ' +
+        '(ana, bruno, carla), asi que ninguna es "la" responsable',
+    })
+
+    expect(texto).toContain('3 personas asignadas')
+    expect(texto).toContain('ana, bruno, carla')
+    expect(texto).toContain('alguien tiene que hacerse cargo')
+    // Y sigue sin mencionar a nadie: nombrarlos no es elegir a uno.
+    expect(texto).not.toContain('@ana')
+  })
+
+  it('sin motivo NO se inventa uno concreto', () => {
+    // El respaldo dice que no se sabe, no "no hay assignee": afirmar la causa
+    // sin haberla comprobado es la misma mentira, solo que por defecto.
+    const texto = renderEscalationComment(BASE)
+    expect(texto).toContain('No se ha podido determinar quien responde')
+    expect(texto).not.toContain('assignee')
+  })
 })
 
 describe('que se cuenta en el aviso', () => {
