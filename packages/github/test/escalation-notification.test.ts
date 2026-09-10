@@ -133,6 +133,27 @@ describe('que se cuenta en el aviso', () => {
   })
 })
 
+describe('el aviso separa QUE SE HACE de QUE PASO', () => {
+  it('lleva el detalle de la pasada, no solo la frase del flujo', () => {
+    // "No se ha gastado intento" no le dice a nadie si el problema es su
+    // codigo, el spec, o que el modelo lleva dos dias negandose (issue #27).
+    const texto = renderEscalationComment({
+      ...BASE,
+      detail: 'El Verifier no pudo emitir veredicto: se nego (reasoning_extraction)',
+    })
+
+    expect(texto).toContain('Qué pasó')
+    expect(texto).toContain('reasoning_extraction')
+    // Y sigue llevando lo que se hace ahora: son dos preguntas distintas.
+    expect(texto).toContain(BASE.reason)
+  })
+
+  it.each([[undefined], ['   ']])('sin detalle util (%s) no se imprime la seccion', (detail) => {
+    const texto = renderEscalationComment(detail === undefined ? BASE : { ...BASE, detail })
+    expect(texto).not.toContain('Qué pasó')
+  })
+})
+
 describe('una tarea sin issue no se puede avisar por este canal', () => {
   it('lanza en vez de tragarselo', async () => {
     // Un aviso que no llega a ninguna parte es peor que un error: nadie se

@@ -33,11 +33,14 @@
     "packages/db/src/routing-suggestions.ts",
     "packages/github/src/routing-trigger.ts",
     "apps/worker/src/responsible.ts",
-    "packages/github/src/issue-assignees.ts"
+    "packages/github/src/issue-assignees.ts",
+    "packages/core/src/verification-outcome.ts",
+    "apps/worker/src/verification-pass.ts"
   ],
   "thresholds": {
     "high": 80,
     "low": 60,
     "break": 60
-  }
+  },
+  "mutate_test_database_url_comment": "SI CORRES ESTO EN LOCAL, EXPORTA `TEST_DATABASE_URL` PRIMERO. Los modulos con base de datos (db/*, queue/*, apps/worker/*) tienen tests que, bajo Stryker y sin esa variable, SE NIEGAN a arrancar a proposito (ADR 0007: levantar un contenedor por mutante hacia que la nota la decidieran los timeouts). El sintoma es desconcertante y conviene reconocerlo: 'Ran 0.00 tests per mutant', 0 killed, 0 timeouts y una puntuacion de 0.00 que rompe el umbral. No es que los tests sean malos: es que no se ha ejecutado ninguno. El CI lo hace bien \u2014 .github/workflows/mutation.yml levanta un servicio de Postgres y exporta la variable."
 }
