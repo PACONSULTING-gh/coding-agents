@@ -28,7 +28,9 @@
     "packages/agents/src/verification/report-render.ts",
     "apps/worker/src/verification-flow.ts",
     "packages/agents/src/routing/shortlist.ts",
-    "packages/agents/src/routing/bench.ts"
+    "packages/agents/src/routing/bench.ts",
+    "packages/core/src/routing-accuracy.ts",
+    "packages/db/src/routing-suggestions.ts"
   ],
   "thresholds": {
     "high": 80,
