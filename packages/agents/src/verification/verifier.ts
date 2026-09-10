@@ -1,8 +1,10 @@
 import { randomBytes } from 'node:crypto'
 
 import {
+  CRITERION_VERDICTS,
   LlmProtocolError,
   ValidationError,
+  type CriterionVerdictValue,
   type LlmEffort,
   type LlmMessage,
   type LlmPort,
@@ -209,8 +211,13 @@ export const DEFAULT_VERIFICATION_MAX_OUTPUT_TOKENS = 32_000
 // La salida
 // ---------------------------------------------------------------------------
 
-export const CRITERION_VERDICTS = ['PASS', 'FAIL', 'SIN_EVIDENCIA'] as const
-export type CriterionVerdictValue = (typeof CRITERION_VERDICTS)[number]
+/**
+ * El vocabulario de veredictos vive en `packages/core` desde que el
+ * clasificador de la pasada (T06) lo necesita: lo emite este fichero, lo
+ * clasifica core y lo persiste `packages/db`, asi que el dominio es su sitio.
+ * Se reexporta aqui para que nada de dentro de `agents` tenga que cambiar.
+ */
+export { CRITERION_VERDICTS, type CriterionVerdictValue }
 
 export const EVIDENCE_SOURCES = ['diff', 'test_output'] as const
 export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number]

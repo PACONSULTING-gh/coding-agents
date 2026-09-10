@@ -43,6 +43,12 @@ export interface HandleVerificationOutcomeInput extends RecordOutcomeInput {
    * ellas falsa.
    */
   readonly unresolvedReason?: string
+  /**
+   * QUE PASO en la pasada, tal como lo conto `classifyVerificationPass`. Sin
+   * esto el aviso solo lleva la frase del flujo, y quien lo lee no sabe si el
+   * problema es su codigo, el spec o que el modelo se esta negando.
+   */
+  readonly detail?: string
   /** El informe de conformidad, si esta pasada llego a producir uno. */
   readonly reportMarkdown?: string
 }
@@ -99,6 +105,7 @@ export async function handleVerificationOutcome(
       ...(input.responsible === undefined ? {} : { responsible: input.responsible }),
       ...(input.mention === undefined ? {} : { mention: input.mention }),
       ...(input.unresolvedReason === undefined ? {} : { unresolvedReason: input.unresolvedReason }),
+      ...(input.detail === undefined ? {} : { detail: input.detail }),
       ...(input.headSha === undefined ? {} : { headSha: input.headSha }),
       ...(input.reportMarkdown === undefined ? {} : { reportMarkdown: input.reportMarkdown }),
     })

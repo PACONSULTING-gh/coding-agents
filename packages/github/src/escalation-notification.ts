@@ -96,9 +96,14 @@ export function renderEscalationComment(notice: EscalationNotice): string {
     lineaDeResponsable(notice),
     '',
     notice.reason,
-    '',
-    `**Intentos:** ${String(notice.attempts)} de ${String(notice.maxAttempts)}`,
   ]
+  if (notice.detail !== undefined && notice.detail.trim() !== '') {
+    // Que paso, en los terminos de la pasada. Va DESPUES de lo que se hace
+    // ahora y antes de los numeros: quien abre esto quiere saber primero si le
+    // toca a el, y enseguida por que.
+    lineas.push('', `**Qué pasó:** ${notice.detail.trim()}`)
+  }
+  lineas.push('', `**Intentos:** ${String(notice.attempts)} de ${String(notice.maxAttempts)}`)
   if (notice.headSha !== undefined) {
     // Sobre QUE codigo. Sin esto, un aviso pegado a un issue al que despues se
     // le empujan commits no dice a que entrega se refiere.

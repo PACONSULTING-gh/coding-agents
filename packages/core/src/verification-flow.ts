@@ -304,7 +304,19 @@ export interface EscalationNotice {
   /** La tarea, con la misma forma que usan los criterios de aceptacion (T01). */
   readonly taskRef: string
   readonly destination: FlowDestination
+  /** QUE SE HACE AHORA y por que, en el lenguaje del flujo (`decideVerificationFlow`). */
   readonly reason: string
+  /**
+   * QUE PASO en la pasada, en el lenguaje de los hechos
+   * (`classifyVerificationPass`): "se nego con reasoning_extraction", "el
+   * manifiesto declara 3 tests y el arbol tiene 2", "1 de 2 criterios en FAIL".
+   *
+   * Es un campo aparte y no una version mas larga de `reason` porque responden
+   * a preguntas distintas, y la que le importa a quien recibe el aviso es esta:
+   * "no se ha gastado intento" no le dice si el problema es su codigo, el spec,
+   * o que el modelo lleva dos dias negandose a contestar.
+   */
+  readonly detail?: string
   readonly attempts: number
   readonly maxAttempts: number
   /** `undefined` cuando no se ha podido identificar a nadie. Se dice en el aviso. */
