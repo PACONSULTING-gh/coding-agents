@@ -32,31 +32,35 @@ import {
  * razonamiento seria una justificacion a posteriori de una decision ya tomada.
  *
  * ===========================================================================
- * OJO CON EL MODELO POR DEFECTO — ISSUE #27
+ * EL RECHAZO DE OPUS NO ERA DETERMINISTA — ISSUE #27
  * ===========================================================================
- * `ROUTER_MODEL` es `claude-opus-5` porque es el modelo de produccion que fija
- * el PRD, pero MEDIDO el 10 de septiembre de 2026: por la ruta del CLI de
- * Claude Code, Opus 5 RECHAZA esta peticion con la categoria
- * `reasoning_extraction`, igual que la del Verifier. Y no es cosa de un prompt
- * concreto: son dos prompts sin una linea en comun, y lo unico que comparten es
- * pedir razonamiento estructurado con `effort: xhigh`.
+ * Esto hay que leerlo entero antes de fiarse de cualquier medida de aqui.
  *
- * `claude-sonnet-5` responde con normalidad por esa misma ruta.
+ * El 10 de septiembre de 2026, por la ruta del CLI, `claude-opus-5` RECHAZABA
+ * esta peticion con la categoria `reasoning_extraction`, 2 de 2 intentos, sin
+ * generar un solo token. Igual que la del Verifier.
  *
- * HASTA EL ADR 0009 el argumento para dejar el defecto en Opus era que una
- * limitacion de la ruta de MEDICION no debe decidir el modelo de PRODUCCION.
- * ESE ARGUMENTO YA NO VALE: el CLI es la ruta de produccion, asi que esto no
- * es un tropiezo del instrumento sino que el modelo por defecto NO CONTESTA
- * por el camino que se despliega.
+ * El 11 de septiembre, CON ESTE PROMPT SIN TOCAR NI UNA LINEA, responde: 7 de
+ * 7 casos del banco, sin un solo fallo en ninguna dimension.
  *
- * Aun asi el defecto no se toca aqui, y por otra razon: elegir el modelo del
- * router es una decision de producto que toma un humano (`CLAUDE.md` §2.1), no
- * un efecto colateral de un cambio de documentacion. Las dos salidas son
- * arreglar el prompt o bajar el defecto a Sonnet diciendo por que. Se decide en
- * el issue #27, que deja de ser una curiosidad y pasa a bloquear.
+ * Lo del Verifier SI era del prompt y esta demostrado: con el prompt viejo
+ * sigue rechazando hoy 2 de 2, y con la linea reescrita responde. Se comprobo
+ * con un control el mismo dia, no se dio por hecho.
+ *
+ * Lo de aqui, no. Nadie cambio nada y el comportamiento cambio. Asi que o el
+ * clasificador de seguridad no es determinista, o cambio por fuera. Las dos
+ * posibilidades significan lo mismo para esta plataforma: UNA NEGATIVA DEL
+ * MODELO ES UN MODO DE FALLO NORMAL Y RECURRENTE, no una anomalia que se
+ * arregla una vez. Por eso el flujo de verificacion tiene
+ * `verifier_unavailable` y por eso ese modo NO le gasta un intento al agente
+ * (ADR 0008, decision 1): escalar trabajo sano con un diagnostico falso seria
+ * el efecto de tratar esto como si no pudiera repetirse.
+ *
+ * NO se baja el defecto a Sonnet. Con Opus el banco sale 7 de 7 y con Sonnet
+ * salia 4 de 7 (falla r04, la carga incompleta, y r07, la inyeccion).
  */
 
-/** Modelo por defecto. Ver el aviso de arriba: hoy NO responde (issue #27). */
+/** Modelo por defecto. Ver el aviso de arriba sobre el issue #27. */
 export const ROUTER_MODEL = 'claude-opus-5'
 
 /**

@@ -500,8 +500,19 @@ const ROLE_PROMPT: string = [
   '--- COMO SE ESCRIBE CADA VEREDICTO ------------------------------------------',
   'Un elemento por criterio, ni uno mas ni uno menos, en el orden en que se dan, con el',
   '`criterionId` EXACTO. Cada elemento lleva, en este orden:',
-  '  1. `reasoning` — el razonamiento, ENTERO Y ANTES del veredicto. No es un resumen de la',
-  '     conclusion: es como llegas a ella.',
+  // OJO AL TOCAR ESTA LINEA. Decia "el razonamiento, ENTERO Y ANTES del
+  // veredicto. No es un resumen de la conclusion: es como llegas a ella", y con
+  // esa redaccion `claude-opus-5` RECHAZABA la peticion entera con la categoria
+  // `reasoning_extraction`, 2 de 2 intentos, sin generar un solo token
+  // (issue #27). Aislado a esta linea concreta: neutralizar solo la
+  // `description` del esquema JSON seguia dando rechazo; neutralizar solo esto
+  // hace que responda.
+  //
+  // Lo que se pide NO se ha debilitado: razonar antes de dictaminar lo fuerza
+  // el ORDEN de los campos del esquema (ver la cabecera de `CriterionVerdict`),
+  // que es el mecanismo de verdad. La frase anterior era redundante.
+  '  1. `reasoning` — por que el veredicto es ese. Se escribe antes que el veredicto y no es',
+  '     un resumen de la conclusion.',
   '  2. `criterionQuote` — un fragmento LITERAL del texto del criterio.',
   '  3. `evidenceSource` + `evidenceQuote` — un fragmento LITERAL del diff o de la salida de',
   '     tests. Para SIN_EVIDENCIA, cita el fragmento mas cercano al criterio que demuestra el',

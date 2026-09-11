@@ -7,16 +7,22 @@
  * ===========================================================================
  * QUE SE HA MEDIDO Y QUE NO
  * ===========================================================================
- * Corrido el 9 de septiembre de 2026 por la ruta de CLI —la de PRODUCCION
- * desde el ADR 0009— con `claude-sonnet-5`: 0 de 6 trampas aprobadas y 0 de 1
- * casos limpios bloqueados, con un desacuerdo (el caso de inyeccion contesto
- * SIN_EVIDENCIA donde el banco espera FAIL). La cifra entera, con las tres
- * cosas que NO dice, esta en el README de este paquete.
+ * Corrido el 11 de septiembre de 2026 por la ruta de CLI —la de PRODUCCION
+ * desde el ADR 0009— y con el MODELO DE PRODUCCION, `claude-opus-5`: 0 de 6
+ * trampas aprobadas, 0 de 1 casos limpios bloqueados y CERO criterios en
+ * desacuerdo. Es la primera medida de la configuracion que se despliega. La
+ * cifra entera, con lo que NO dice, esta en el README de este paquete.
  *
- * LO QUE SIGUE SIN MEDIR es el MODELO configurado, `claude-opus-5`: rechaza la
- * peticion del Verifier con la categoria `reasoning_extraction` (issue #27), y
- * desde el ADR 0009 eso ya no es un estorbo para medir sino un bloqueo de
- * produccion, porque el rechazo es por el camino que se despliega.
+ * Hasta el issue #27 no se podia tomar: `claude-opus-5` rechazaba la peticion
+ * entera con la categoria `reasoning_extraction`. Lo desbloqueo reescribir DOS
+ * LINEAS del prompt que pedian "el razonamiento, ENTERO Y ANTES del veredicto"
+ * —redundantes, porque lo que fuerza ese orden es el esquema—. Comprobado con
+ * un control el mismo dia: con el prompt viejo sigue rechazando 2 de 2.
+ *
+ * La medida anterior, del 9 de septiembre con `claude-sonnet-5`, daba las
+ * mismas dos tasas pero UN criterio en desacuerdo: en el caso de inyeccion
+ * contestaba SIN_EVIDENCIA donde el banco espera FAIL. Una tasa no es
+ * transferible entre modelos, y la diferencia esta justo ahi.
  *
  * No corre en CI a proposito: siete llamadas con esfuerzo `xhigh` sobre diffs
  * enteros en cada push serian un peaje recurrente —de factura por la ruta de
