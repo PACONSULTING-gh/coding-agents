@@ -32,32 +32,49 @@ Epic 01 ──┬── Epic 02 ──┬── Epic 03
 
 ## Decisiones pendientes que bloquean tareas concretas
 
-Ninguna bloquea el Epic 01. Se pueden tomar sobre la marcha, pero cada una tiene
-su fecha límite real. **La 4 ya está decidida** (ADR 0008).
+**Ya no queda ninguna abierta.** Las cuatro que quedaban se decidieron el 12 de
+septiembre de 2026 y están en `docs/adr/0010-banco-de-pruebas-con-desarrolladores-simulados.md`.
+Aquí va el resumen; el porqué de cada una está en el ADR.
 
-### 1. Proyecto piloto
-**Bloquea:** Epic 01 T07
-**Qué hay que decidir:** qué proyecto real de Liberion sirve de conejillo de
-indias. Debe ser real (no un juguete), con varias personas tocándolo, y tolerar
-que la herramienta falle al principio.
-**Cuándo:** antes de cerrar el Epic 01.
+### 1. Proyecto piloto — **DECIDIDA (12 sep 2026)**
+**Bloqueaba:** Epic 01 T07 (#8), #34, el cierre del Epic 01
 
-### 2. Baseline de métricas
-**Bloquea:** la validación de todo el producto
-**Qué hay que decidir:** cómo se miden hoy las cuatro métricas del PRD §3
-(colisiones en merge, horas revisando diffs, tareas duplicadas, agentes
-atascados). Si no se mide antes, no habrá con qué comparar después.
-**Cuándo:** semana 1 del piloto, no después.
+**Decisión:** no hay piloto con un equipo real. Hay un **banco de pruebas con
+cinco desarrolladores simulados**, cada uno en su contenedor, con cuenta de
+GitHub real y su propia instancia de Claude Code. La carga de trabajo es un CRM
+para una empresa de construcción (Next.js + Postgres + El Gabinete).
 
-### 3. Formato de la vista de estado
-**Bloquea:** Epic 04 T05
-**Qué hay que decidir:** comentario en issue, resumen por CLI, o canal de
-mensajería. Es decisión de producto, no técnica.
-**Cuándo:** antes de empezar Epic 04 T05.
+Se decidió así porque **ninguno de los doce repos de la organización ha abierto
+jamás un issue**, y esta plataforma se apoya en Issues como fuente de verdad:
+elegir piloto no era elegir repo, era pedirle a tres personas a tiempo parcial
+que cambiaran su forma de trabajar por una herramienta que aún no les ha
+demostrado nada.
 
-### 4. Flujo de fallo de verificación — ~~PENDIENTE~~ **DECIDIDA (9 sep 2026)**
+**Lo que hay que decir cada vez que se citen resultados de aquí:** valida el
+MECANISMO —claims, colisiones, router, verificación, escalado— y **no valida la
+adopción**. Las dos métricas del PRD §3 que miden comportamiento humano (horas
+del lead revisando diffs, y atascos detectados antes que por la persona) son
+inobservables con desarrolladores simulados.
+
+### 2. Baseline de métricas — **DECIDIDA (12 sep 2026)**
+**Decisión:** **no se mide baseline.** Se comparará cualitativamente al final.
+
+**Y lo que eso desactiva:** el PRD §3 decía que si tras el piloto no se mueve
+ninguna métrica, hay que replantear. Sin baseline esa salvaguarda no se puede
+aplicar: no habrá con qué comparar, así que "no se ha movido nada" no se podrá
+ni afirmar ni negar. La tabla del PRD se corrigió para que no siga prometiendo
+una medida que no se va a tomar.
+
+### 3. Formato de la vista de estado — **DECIDIDA (12 sep 2026)**
+**Bloqueaba:** Epic 04 T05
+
+**Decisión:** las **tres vías** — un issue fijo que se reescribe, un resumen por
+CLI bajo demanda, y **Slack**. No son tres implementaciones: son tres
+adaptadores del `NotificationPort` que ya existe.
+
+### 4. Flujo de fallo de verificación — **DECIDIDA (9 sep 2026)**
 **Bloqueaba:** Epic 05 T06
-**Decisión:** `docs/adr/0008-flujo-de-fallo-y-ambiguedad.md`, **aceptado el 10 de septiembre de 2026**.
+**Decisión:** `docs/adr/0008-flujo-de-fallo-y-ambiguedad.md`.
 
 Resumen: no hay *un* flujo de fallo, hay **cuatro modos con tres destinos**. Un
 fallo del gate o un FAIL del Verifier vuelven al mismo agente; un SIN_EVIDENCIA
@@ -70,41 +87,14 @@ puerto, con un adaptador que comenta en el issue.
 Que esta tarea estuviera mal planteada —dando por hecho que era un solo flujo—
 es la razón de que llevara meses sin diseñarse.
 
-### 5. Presentación del informe de conformidad
-**Bloquea:** Epic 05 T05 (parcialmente — se puede empezar con un formato
-provisional)
-**Qué hay que decidir:** cómo se presenta para que genere confianza real y no
-acabe siendo otra notificación que se aprueba sin leer. Necesita iterar con el
-lead real, no diseñarse en abstracto.
-**Cuándo:** durante el Epic 05, con feedback del usuario real.
+### 5. Presentación del informe de conformidad — **DECIDIDA (12 sep 2026)**
+**Bloqueaba:** Epic 05 T05 (parcialmente)
 
----
+**Decisión:** tres añadidos sobre lo que ya cumple — una sección fija con **lo
+que NO se pudo verificar**, un **enlace a la línea del diff** en cada veredicto,
+y **con qué se produjo el informe** (modelo, esfuerzo, reintentos o negativas).
 
-## Lo que ya está decidido y NO hay que volver a discutir
-
-Está en `CLAUDE.md` §3. Si alguien cree que una decisión está mal, el
-procedimiento es abrir un ADR proponiendo el cambio, no reabrir el debate en un
-PR.
-
-- GitHub App, no OAuth App
-- Postgres con esquema compartido y RLS forzada
-- pg-boss sobre el mismo Postgres, tras una interfaz
-- PgBouncer en modo transacción desde el día uno
-- Grafo en Postgres con CTEs recursivas, no base de datos de grafos
-- CCPM + GitHub Issues como motor y fuente de verdad
-- Heartbeats push, nunca polling
-- TypeScript/Node, monorepo
-- SonarQube Server self-hosted (residencia de datos UE)
-- ponytail instalado en los agentes desde el principio
-
----
-
-## Lo que sigue sin investigar (y no hace falta para construir)
-
-- Skills de comunidad por fase del SDLC, más allá de ponytail. Se pueden añadir
-  sobre la marcha; no son cimiento.
-- Agente de despliegue Terraform/Azure. Ya investigado, pero fuera del alcance
-  de la v1 — va en v2 con su propio epic.
-- Modelo de precios detallado para la versión producto. La licencia y el enfoque
-  están decididos (BSL o fair-code, monetizar hosting + features de IA); los
-  números concretos son una conversación posterior.
+Lo último se acota a propósito: **hechos, no una cifra de confianza.** "Modelo
+`claude-opus-5`, esfuerzo `xhigh`, 1 reintento tras una negativa" es
+verificable; "Confianza: 7/10" es la puntuación del 1 al 10 que el criterio de
+aceptación de T05 prohíbe, con otro nombre.

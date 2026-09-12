@@ -45,13 +45,24 @@ Medibles, en el propio uso interno de Liberion durante el piloto:
 
 | Métrica | Baseline hoy | Objetivo |
 |---|---|---|
-| Colisiones descubiertas en merge (por sprint) | medir en semana 1 | reducir a la mitad |
-| Tiempo del lead revisando diffs (h/semana) | medir en semana 1 | reducir a la mitad |
-| Tareas duplicadas detectadas | medir en semana 1 | cero no detectadas antes de empezar |
+| Colisiones descubiertas en merge (por sprint) | **sin baseline** | reducir a la mitad |
+| Tiempo del lead revisando diffs (h/semana) | **sin baseline** | reducir a la mitad |
+| Tareas duplicadas detectadas | **sin baseline** | cero no detectadas antes de empezar |
 | Agentes atascados detectados por el sistema antes que por la persona | 0% | >70% |
 
 Si tras el piloto no se mueve ninguna de estas, el producto no resuelve el
 problema y hay que replantear, no seguir construyendo.
+
+> **Ojo con el párrafo de arriba desde el 12 de septiembre de 2026.** Esta
+> columna decía "medir en semana 1" y se decidió **no medir ninguna baseline**
+> (ADR 0010, decisión 2). Sin ella, esa salvaguarda no se puede aplicar: no hay
+> con qué comparar, así que "no se ha movido nada" no se podrá ni afirmar ni
+> negar. Se deja escrita la regla, y se deja escrito que hoy no es ejecutable.
+>
+> Además, las dos métricas de comportamiento humano —horas del lead revisando
+> diffs, y atascos detectados antes que por la persona— **son inobservables en
+> el banco de pruebas** que sustituye al piloto: un desarrollador simulado no se
+> cansa de leer ni se da cuenta tarde de nada.
 
 ## 4. Alcance de la v1
 
