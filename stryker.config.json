@@ -44,7 +44,8 @@
     "packages/graph/src/parse/ecmascript.ts",
     "packages/graph/src/parse/python.ts",
     "packages/graph/src/parse/typescript.ts",
-    "packages/graph/src/parse/javascript.ts"
+    "packages/graph/src/parse/javascript.ts",
+    "apps/simulated-dev/src/work-loop.ts"
   ],
   "thresholds": {
     "high": 80,
