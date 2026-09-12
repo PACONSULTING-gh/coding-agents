@@ -14,3 +14,10 @@ export {
   type WorkAction,
   type WorkLoopInput,
 } from './work-loop.js'
+export {
+  readDelivery,
+  MAX_DIFF_BYTES,
+  type Delivery,
+  type DeliveryRequest,
+  type TestRunEvidence,
+} from './delivery.js'
