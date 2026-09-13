@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+/*
+ * Tokens de El Gabinete (PACONSULTING-gh/liberion-design-system).
+ *
+ * Se copian aqui en vez de consumir el registry de shadcn a proposito: el
+ * registry sirve componentes, y este panel solo necesita la PALETA. Traerse la
+ * cadena entera de shadcn para cuatro colores seria el peldaño 7 de la escalera
+ * de CLAUDE.md 2.4 cuando basta el 3.
+ *
+ * Si algun dia el panel necesita componentes de verdad, se instala el registry
+ * y esto se borra. Mientras tanto, lo unico que hay que mantener sincronizado
+ * son estos valores — y por eso se dice de donde salen.
+ */
+@theme {
+  --color-papel: #f4efe5;
+  --color-tinta: #1c2536;
+  --color-tarjeta: #faf6ec;
+  --color-apagado: #5f6874;
+  --color-borde: rgba(28, 37, 54, 0.16);
+  --color-oro: #d9a441;
+  --color-alarma: #b4352a;
+  --radius: 0rem;
+  --font-heading: 'Fraunces', ui-serif, Georgia, serif;
+}
+
+body {
+  background: var(--color-papel);
+  color: var(--color-tinta);
+}

@@ -13,6 +13,8 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/coverage/**',
       '**/.stryker-tmp/**',
+      // Salida de build de Next: no es codigo nuestro y su parseo falla.
+      '**/.next/**',
     ],
   },
   js.configs.recommended,

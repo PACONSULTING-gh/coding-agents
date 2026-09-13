@@ -57,7 +57,8 @@
     "apps/daemon/src/beat-schedule.ts",
     "apps/daemon/src/telemetry.ts",
     "apps/daemon/src/daemon.ts",
-    "packages/core/src/collision-prediction.ts"
+    "packages/core/src/collision-prediction.ts",
+    "apps/dashboard/src/lib/view.ts"
   ],
   "thresholds": {
     "high": 80,
