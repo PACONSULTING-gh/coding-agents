@@ -21,7 +21,7 @@
     "@coord/core": "workspace:*",
     "@coord/db": "workspace:*",
     "@coord/github": "workspace:*",
-    "zod": "^4.5.4"
+    "zod": "^4.6.1"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.1.0",
