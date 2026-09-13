@@ -84,6 +84,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@coord/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@coord/core':
         specifier: workspace:*
         version: link:../../packages/core
