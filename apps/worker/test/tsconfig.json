@@ -6,5 +6,10 @@
     "declaration": false,
     "types": ["node"]
   },
-  "include": ["../src/**/*.ts", "./**/*.ts", "../../../packages/db/test/support/**/*.ts"]
+  "include": [
+    "../src/**/*.ts",
+    "./**/*.ts",
+    "../../../packages/db/test/support/**/*.ts",
+    "../../../packages/graph/test/support/git-repo.ts"
+  ]
 }

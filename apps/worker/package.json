@@ -17,7 +17,8 @@
     "@coord/db": "workspace:*",
     "@coord/github": "workspace:*",
     "@coord/graph": "workspace:*",
-    "pino": "^10.3.1"
+    "pino": "^10.3.1",
+    "@coord/agents": "workspace:*"
   },
   "devDependencies": {
     "@testcontainers/postgresql": "^12.1.0",

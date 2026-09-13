@@ -19,6 +19,9 @@
     },
     {
       "path": "../../packages/graph"
+    },
+    {
+      "path": "../../packages/agents"
     }
   ],
   "include": ["src"]
