@@ -49,7 +49,8 @@
     "apps/worker/src/delivery.ts",
     "apps/worker/src/verification-run.ts",
     "packages/core/src/heartbeat.ts",
-    "packages/db/src/agents.ts"
+    "packages/db/src/agents.ts",
+    "apps/webhook/src/heartbeat-route.ts"
   ],
   "thresholds": {
     "high": 80,
