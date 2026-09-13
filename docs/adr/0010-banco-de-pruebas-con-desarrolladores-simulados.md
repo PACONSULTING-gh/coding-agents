@@ -23,7 +23,40 @@ Mirando la organización el 11 de septiembre de 2026, doce repositorios:
 
 **El piloto es un banco de pruebas con cinco desarrolladores simulados**, cada uno en su contenedor, con su cuenta de GitHub real y su propia instancia de Claude Code. La carga de trabajo es un CRM para una empresa de construcción, sobre Next.js + Postgres + El Gabinete.
 
-Las cuentas de GitHub son **reales y no bots**, y esa parte no es negociable: el router sugiere un login, un humano asigna el issue a ese login, y el escalado menciona a alguien. Con actores internos esos tres caminos no se ejercitan, y son criterios de aceptación de T03 y de T06. Una GitHub App tampoco vale: no se puede poner como assignee de un issue.
+### Corrección del 13 de septiembre de 2026: hacen falta CERO cuentas para empezar, y UNA después
+
+Este ADR decía que las cinco cuentas de GitHub eran reales y que **"esa parte no
+es negociable"**. Era mi recomendación y **estaba equivocada**. Lo que se
+comprobó después, en el código y contra la API:
+
+- **El router identifica a las personas por el EMAIL DE GIT, no por el login de
+  GitHub.** `ownership/git.ts` lo dice literalmente: _"Identidad estable del
+  autor: el email en minúsculas"_. Un commit firmado como
+  `ana <ana@ejemplo.test>` es válido sin que exista ninguna cuenta.
+- **Los claims usan un `holder_id` interno**, que tampoco es un login.
+- Así que ownership, co-change, claims, colisiones, sugerencias del router y
+  verificación funcionan con **cero cuentas**.
+
+Lo único que necesita una cuenta de verdad es **ser assignee de un issue** y
+**ser mencionado en un escalado**. Y para ejercitar ese camino entero —el router
+sugiere un login, un humano lo asigna, el escalado le menciona— basta **una**.
+Las otras cuatro solo comprarían "varios assignees distintos", que prueba a
+GitHub más que a este código.
+
+**Decisión corregida: cero cuentas para empezar, una cuando se cablee la
+asignación.** Si algún día hace falta medir el reparto entre varios assignees
+reales, se añaden entonces.
+
+Lo que **sigue siendo cierto** de la versión anterior, y por eso se conserva:
+una **GitHub App no vale** para esto. Se verificó contra la API de este repo:
+los únicos elegibles como assignee son `type=User`. Una App puede empujar, abrir
+PRs y comentar, pero no se le puede asignar un issue.
+
+Y una restricción que no se sabía al escribir la versión anterior: **los términos
+de GitHub no permiten cuentas registradas por bots o métodos automatizados.** Las
+machine accounts sí están permitidas, pero las crea una persona a mano. No se
+puede automatizar, y por tanto no es trabajo que un agente pueda quitarle de
+encima a nadie.
 
 ## Lo que esto valida, y lo que NO
 
@@ -71,7 +104,11 @@ El punto 3 roza un criterio de aceptación de T05 que prohíbe expresamente "una
 ## Consecuencias que se aceptan
 
 - **Cinco agentes sobre una sola suscripción.** El ADR 0009 ya aceptó que la plataforma compitiera por los límites del desarrollador; esto lo multiplica por cinco. Un día de banco de pruebas a pleno rendimiento puede dejar sin herramienta a quien la necesita para trabajar. Por eso el número de agentes que escriben a la vez es **configurable**, y se puede bajar a turnos sin rediseñar nada: los claims duran más que la escritura, así que sigue habiendo colisiones aunque solo teclee uno.
-- **Cinco cuentas de GitHub que crear y mantener**, con sus correos. Es trabajo manual de una persona y no se puede automatizar desde aquí.
+- ~~**Cinco cuentas de GitHub que crear y mantener**~~ — **corregido el 13 de
+  septiembre de 2026**: hacen falta cero para empezar y una para la asignación.
+  Ver la corrección de arriba. Lo que sí sigue siendo cierto es que crearla es
+  trabajo manual de una persona: los términos de GitHub prohíben registrar
+  cuentas por métodos automatizados.
 - **Los contenedores no duermen ni están tras NAT**, que es justo el escenario para el que se diseñó el heartbeat por push (`CLAUDE.md` §3). Ese caso queda sin ejercitar.
 - **El CRM es carga de trabajo, no producto.** Si acaba siendo un producto de verdad, deja de ser un banco de pruebas donde romper cosas sale gratis, y eso cambia esta decisión.
 

@@ -40,8 +40,13 @@ Aquí va el resumen; el porqué de cada una está en el ADR.
 **Bloqueaba:** Epic 01 T07 (#8), #34, el cierre del Epic 01
 
 **Decisión:** no hay piloto con un equipo real. Hay un **banco de pruebas con
-cinco desarrolladores simulados**, cada uno en su contenedor, con cuenta de
-GitHub real y su propia instancia de Claude Code. La carga de trabajo es un CRM
+cinco desarrolladores simulados**, cada uno en su contenedor y con su propia
+instancia de Claude Code.
+
+**Corregido el 13 de septiembre de 2026:** la versión anterior decía "con cuenta
+de GitHub real" cada uno. Hacen falta **cero** para empezar y **una** cuando se
+cablee la asignación: el router identifica a la gente por el email de git, no
+por el login. El porqué está en el ADR 0010. La carga de trabajo es un CRM
 para una empresa de construcción (Next.js + Postgres + El Gabinete).
 
 Se decidió así porque **ninguno de los doce repos de la organización ha abierto
