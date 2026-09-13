@@ -243,6 +243,23 @@ async function seedTenant(client: Client, slug: string): Promise<TenantFixture> 
         JSON.stringify([{ rank: 1, candidateId: `dev-${slug}`, leadingSignal: 'ownership' }]),
       ],
     )
+
+    // Agentes y su cola de comandos (migracion 0013). Mismo `agent_key` en los
+    // dos fixtures, como en el resto: la unicidad es por tenant. Esto dice
+    // quien tiene un agente corriendo, en que tarea y como va — y si cruzara,
+    // un cliente veria el trabajo en curso de otro.
+    const agentResult = await client.query<{ id: string }>(
+      `INSERT INTO agents (tenant_id, agent_key, label, token_hash)
+       VALUES ($1, 'dev-1', $2, $3)
+       RETURNING id`,
+      [id, `Dev de ${slug}`, `hash-${slug}-${'0'.repeat(40)}`],
+    )
+    const agentId = agentResult.rows[0]?.id
+    await client.query(
+      `INSERT INTO agent_commands (tenant_id, agent_id, kind, payload)
+       VALUES ($1, $2, 'nudge', $3::jsonb)`,
+      [id, agentId, JSON.stringify({ texto: `para ${slug}` })],
+    )
   })
 
   return { id, slug, userIds, teamId, skillId, installationId }
