@@ -13,3 +13,6 @@ CLAUDE.md
 
 # Skills de terceros instaladas con version fijada. Codigo vendorizado.
 .claude/skills/
+
+# Salida de build de Next: no es codigo nuestro.
+.next

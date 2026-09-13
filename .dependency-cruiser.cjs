@@ -169,7 +169,7 @@ module.exports = {
     // Acotado a la salida de build de los paquetes del workspace. Un `dist/`
     // global tambien borraba del grafo cualquier dependencia npm servida desde
     // un `dist/`, y con ella la posibilidad de que una regla la evaluase.
-    exclude: { path: '^(packages|apps)/[^/]+/dist/' },
+    exclude: { path: '^(packages|apps)/[^/]+/(dist|\\.next)/' },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.depcruise.json' },
     enhancedResolveOptions: {

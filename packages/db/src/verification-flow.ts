@@ -4,6 +4,7 @@ import {
   type Responsible,
   type VerificationFlowDecision,
   type VerificationOutcome,
+  ValidationError,
 } from '@coord/core'
 import { z } from 'zod'
 
@@ -118,6 +119,33 @@ export async function readVerificationFlow(
     )
     const raw = result.rows.at(0)
     return raw === undefined ? undefined : toRow(raw)
+  })
+}
+
+/**
+ * Todas las tareas con estado de verificacion, las mas recientes primero.
+ *
+ * Es la consulta para la que existe el indice
+ * `verification_flow_tenant_state_updated_at_idx` de la migracion 0011: "que
+ * hay escalado ahora mismo". La usa el panel y la usaria cualquier resumen.
+ *
+ * Se devuelven TODAS y no solo las escaladas: una vista que solo enseña lo que
+ * va mal no deja ver que lo demas existe, y entonces no se puede saber si "hay
+ * dos escaladas" es sobre tres tareas o sobre doscientas.
+ */
+export async function listVerificationFlows(limit = 200): Promise<readonly VerificationFlowRow[]> {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new ValidationError(`listVerificationFlows necesita un limite entero >= 1.`)
+  }
+  return withTenantConnection(async (tx) => {
+    const result = await tx.query<RawRow>(
+      `SELECT ${COLUMNS} FROM verification_flow
+        WHERE tenant_id = $1
+        ORDER BY updated_at DESC
+        LIMIT $2`,
+      [tx.tenantId, limit],
+    )
+    return result.rows.map(toRow)
   })
 }
 
