@@ -1,0 +1,51 @@
+# Unidad de systemd del daemon (epic 04 / T02, criterio 1: "se levanta solo").
+#
+# Instalacion, como usuario y NO como root:
+#
+#     mkdir -p ~/.config/systemd/user
+#     cp coord-daemon.service ~/.config/systemd/user/
+#     systemctl --user edit coord-daemon   # para poner las variables
+#     systemctl --user enable --now coord-daemon
+#     loginctl enable-linger "$USER"       # que siga tras cerrar sesion
+#
+# COMO USUARIO, y esto no es un detalle: el daemon lee el repositorio de una
+# persona y habla en su nombre. Corriendo como root leeria los de todo el mundo,
+# y un token robado daria acceso a la maquina entera en vez de a una sesion.
+#
+# EL TOKEN NO VA AQUI. Este fichero se copia, se comparte y acaba en un repo de
+# dotfiles. Va en un `systemctl --user edit`, que escribe un override con
+# permisos 600, o en un fichero de entorno fuera del control de versiones.
+
+[Unit]
+Description=Daemon de coordinacion (latidos de agente)
+# Sin `After=network-online.target` a proposito: el daemon YA sabe vivir sin
+# red —reintenta con espera creciente— y esperar a que la red este arriba
+# retrasa el arranque en portatiles que empiezan con el wifi apagado.
+After=default.target
+
+[Service]
+Type=simple
+# Las variables van aqui, en un fichero que NO se versiona:
+#   COORD_HUB_URL, COORD_AGENT_TOKEN, COORD_REPO_PATH, COORD_TASK_REF
+EnvironmentFile=%h/.config/coord/daemon.env
+ExecStart=/usr/bin/env pnpm --filter @coord/daemon daemon:start
+WorkingDirectory=%h/coding-agents
+
+# Reinicio SIEMPRE, tambien si termina bien: el unico final "bueno" del daemon
+# es que le rechacen el token, y en ese caso reiniciar tampoco molesta —vuelve
+# a parar en el primer latido y lo deja escrito otra vez—. Lo que no puede
+# pasar es que una excepcion rara lo deje muerto en silencio.
+Restart=always
+RestartSec=30
+
+# El daemon no necesita nada de esto, y no tenerlo limita el daño si algun dia
+# alguien se cuela por aqui.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Salvo el repositorio en el que trabaja, que si tiene que poder leer entero.
+ReadWritePaths=%h/coding-agents
+
+[Install]
+WantedBy=default.target

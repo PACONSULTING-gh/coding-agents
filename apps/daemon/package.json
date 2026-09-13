@@ -1,0 +1,19 @@
+{
+  "name": "@coord/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p test/tsconfig.json",
+    "test": "vitest run",
+    "daemon:start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@coord/core": "workspace:*",
+    "pino": "^10.3.1"
+  }
+}

@@ -53,12 +53,16 @@
     "apps/webhook/src/heartbeat-route.ts",
     "packages/core/src/team-status.ts",
     "packages/slack/src/notifier.ts",
-    "apps/worker/src/team-status-view.ts"
+    "apps/worker/src/team-status-view.ts",
+    "apps/daemon/src/beat-schedule.ts",
+    "apps/daemon/src/telemetry.ts",
+    "apps/daemon/src/daemon.ts"
   ],
   "thresholds": {
     "high": 80,
     "low": 60,
     "break": 60
   },
-  "mutate_test_database_url_comment": "SI CORRES ESTO EN LOCAL, EXPORTA `TEST_DATABASE_URL` PRIMERO. Los modulos con base de datos (db/*, queue/*, apps/worker/*) tienen tests que, bajo Stryker y sin esa variable, SE NIEGAN a arrancar a proposito (ADR 0007: levantar un contenedor por mutante hacia que la nota la decidieran los timeouts). El sintoma es desconcertante y conviene reconocerlo: 'Ran 0.00 tests per mutant', 0 killed, 0 timeouts y una puntuacion de 0.00 que rompe el umbral. No es que los tests sean malos: es que no se ha ejecutado ninguno. El CI lo hace bien — .github/workflows/mutation.yml levanta un servicio de Postgres y exporta la variable."
+  "mutate_test_database_url_comment": "SI CORRES ESTO EN LOCAL, EXPORTA `TEST_DATABASE_URL` PRIMERO. Los modulos con base de datos (db/*, queue/*, apps/worker/*) tienen tests que, bajo Stryker y sin esa variable, SE NIEGAN a arrancar a proposito (ADR 0007: levantar un contenedor por mutante hacia que la nota la decidieran los timeouts). El sintoma es desconcertante y conviene reconocerlo: 'Ran 0.00 tests per mutant', 0 killed, 0 timeouts y una puntuacion de 0.00 que rompe el umbral. No es que los tests sean malos: es que no se ha ejecutado ninguno. El CI lo hace bien — .github/workflows/mutation.yml levanta un servicio de Postgres y exporta la variable.",
+  "mutate_daemon_comment": "apps/daemon/src/daemon.ts mide 74,19 CON 5 TIMEOUTS, y esa cifra esta algo inflada: un timeout cuenta como mutante muerto. Vienen de mutantes que quitan la comprobacion del tope de latidos y dejan el bucle corriendo para siempre — que es EXACTAMENTE lo que hace el daemon en produccion, donde ese tope no se pasa. No son tests flojos: son mutantes que en produccion no cambian nada y en un test cuelgan. Sin ellos la nota real ronda el 66, que sigue por encima del umbral. Se deja en la lista porque las decisiones que contiene —parar con un rechazo, no parar sin red, no dar por aplicado un comando que fallo— si se pueden debilitar sin que nadie lo note."
 }
