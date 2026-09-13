@@ -143,6 +143,48 @@ describe('todo lo que no autentica sale IGUAL', () => {
   })
 })
 
+describe('un agente atascado recibe el empujon EN EL SIGUIENTE latido', () => {
+  it('no en el de ahora, que ya ha leido sus comandos', async () => {
+    // T03, criterio 3. Meterlo en la respuesta de este mismo latido seria
+    // contestarse a uno mismo: los comandos de esta respuesta ya se leyeron
+    // antes de clasificar.
+    const agente = await nuevoAgente()
+
+    const primero = await latir(agente.token, {
+      telemetry: { repeatedToolCalls: 5, lastToolCall: 'Bash(pnpm test)' },
+    })
+    expect(primero.statusCode).toBe(200)
+    expect(primero.json<{ commands: unknown[] }>().commands).toEqual([])
+
+    const segundo = await latir(agente.token, { telemetry: { repeatedToolCalls: 5 } })
+    const comandos = segundo.json<{ commands: { kind: string }[] }>().commands
+    expect(comandos).toHaveLength(1)
+    expect(comandos[0]?.kind).toBe('nudge')
+  }, 120_000)
+
+  it('y NO se le empuja otra vez en cada latido', async () => {
+    // El daemon late cada 45 segundos: sin enfriamiento serian veinte
+    // empujones en un cuarto de hora.
+    const agente = await nuevoAgente()
+    const atascado = { telemetry: { repeatedToolCalls: 5 } }
+
+    await latir(agente.token, atascado)
+    await latir(agente.token, atascado)
+    await latir(agente.token, atascado)
+    const cuarto = await latir(agente.token, atascado)
+
+    expect(cuarto.json<{ commands: unknown[] }>().commands).toEqual([])
+  }, 120_000)
+
+  it('un agente que va bien no recibe nada', async () => {
+    const agente = await nuevoAgente()
+    await latir(agente.token, { telemetry: { repeatedToolCalls: 0 } })
+    const segundo = await latir(agente.token, { telemetry: { repeatedToolCalls: 0 } })
+
+    expect(segundo.json<{ commands: unknown[] }>().commands).toEqual([])
+  }, 120_000)
+})
+
 describe('la telemetria es entrada no confiable', () => {
   it.each([
     ['un array', { telemetry: [1, 2, 3] }],

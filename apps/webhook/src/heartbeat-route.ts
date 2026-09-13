@@ -1,8 +1,15 @@
 import { NotFoundError, UnauthorizedError, ValidationError } from '@coord/core'
-import { authenticateAgent, recordHeartbeat } from '@coord/db'
+import {
+  authenticateAgent,
+  enqueueAgentCommand,
+  lastCommandEnqueuedAt,
+  recordHeartbeat,
+} from '@coord/db'
 import { runWithTenant } from '@coord/core'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import type { Logger } from 'pino'
+
+import { decideNudge, parseTelemetry } from './heartbeat-classify.js'
 
 /**
  * El endpoint de latidos (epic 04 / T01, issue #60).
@@ -119,9 +126,32 @@ export async function handleHeartbeat(
   }
 
   try {
-    const resultado = await runWithTenant({ tenantId: agente.tenantId }, () =>
-      recordHeartbeat({ agentId: agente.id, telemetry }),
-    )
+    const resultado = await runWithTenant({ tenantId: agente.tenantId }, async () => {
+      // 1. El latido primero. Que la clasificacion falle no puede hacer que se
+      //    pierda la señal de que la maquina esta viva, que es lo unico que
+      //    este endpoint garantiza.
+      const latido = await recordHeartbeat({ agentId: agente.id, telemetry })
+
+      // 2. Y ahora, si el agente esta atascado, se le encola un empujon para
+      //    que viaje en el SIGUIENTE latido (T03, criterio 3). No en este: los
+      //    comandos de esta respuesta ya se han leido arriba, y meterlo aqui
+      //    seria contestarse a uno mismo.
+      const nudge = decideNudge(
+        parseTelemetry(telemetry),
+        await lastCommandEnqueuedAt(agente.id, 'nudge'),
+        new Date(),
+      )
+      if (nudge.enqueue) {
+        await enqueueAgentCommand({
+          agentId: agente.id,
+          kind: 'nudge',
+          payload: { motivo: nudge.reason },
+        })
+        deps.logger.info({ agentKey: agente.agentKey, motivo: nudge.reason }, 'Empujon encolado')
+      }
+
+      return latido
+    })
 
     deps.logger.debug(
       { agentKey: agente.agentKey, comandos: resultado.commands.length },

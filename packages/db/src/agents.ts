@@ -217,6 +217,32 @@ export async function enqueueAgentCommand(input: EnqueueCommandInput): Promise<A
   })
 }
 
+/**
+ * Cuando se le encolo por ultima vez un comando de este tipo a un agente.
+ *
+ * Se mira `created_at` y NO `delivered_at` a proposito: lo que hay que espaciar
+ * es cuantas veces se DECIDE molestar, no cuantas veces llega. Si se mirara la
+ * entrega, un agente que no recoge sus comandos —porque esta atascado, que es
+ * justo el caso— acumularia una cola de empujones y los recibiria todos de
+ * golpe al volver.
+ */
+export async function lastCommandEnqueuedAt(
+  agentId: string,
+  kind: AgentCommandKind,
+): Promise<Date | undefined> {
+  const id = parseInput(uuidSchema, agentId, 'lastCommandEnqueuedAt')
+  return withTenantConnection(async (tx) => {
+    const result = await tx.query<{ created_at: Date }>(
+      `SELECT created_at FROM agent_commands
+        WHERE tenant_id = $1 AND agent_id = $2 AND kind = $3
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [tx.tenantId, id, kind],
+    )
+    return result.rows.at(0)?.created_at
+  })
+}
+
 export interface HeartbeatInput {
   readonly agentId: string
   readonly telemetry?: Readonly<Record<string, unknown>>
