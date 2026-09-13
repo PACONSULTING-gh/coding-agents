@@ -5,16 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "echo \"El panel se construye con pnpm build:next (ver _build_comment)\"",
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:next": "next build"
   },
   "dependencies": {
     "@coord/core": "workspace:*",
     "@coord/db": "workspace:*",
     "@coord/graph": "workspace:*",
-    "next": "16.2.9",
+    "next": "^16.3.3",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -23,5 +24,6 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4"
-  }
+  },
+  "_build_comment": "`build` NO ejecuta `next build` a proposito. Todos los jobs de CI corren `pnpm -r build` para compilar los paquetes del workspace, y meter ahi la construccion del panel convertia un fallo de front end en un fallo de type-check, de tests y de lint a la vez. El panel se construye con `build:next`, que es lo que corre su propio job."
 }

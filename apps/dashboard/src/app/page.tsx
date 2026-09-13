@@ -1,8 +1,8 @@
 import { buildTeamStatus, runWithTenant } from '@coord/core'
 import { configureDatabase, readAgentStatuses } from '@coord/db'
 
-import { haceCuanto, tonoDeLiveness } from '../lib/view.js'
-import { tenantId } from '../lib/tenant.js'
+import { haceCuanto, tonoDeLiveness } from '../lib/view'
+import { tenantId } from '../lib/tenant'
 
 /**
  * Quien esta haciendo que y como va.

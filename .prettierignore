@@ -16,3 +16,6 @@ CLAUDE.md
 
 # Salida de build de Next: no es codigo nuestro.
 .next
+
+# Lo genera Next en cada build y no se versiona.
+next-env.d.ts

@@ -2,8 +2,8 @@ import { runWithTenant } from '@coord/core'
 import { configureDatabase } from '@coord/db'
 import { activeClaims } from '@coord/graph'
 
-import { cuantoLeQueda } from '../../lib/view.js'
-import { tenantId } from '../../lib/tenant.js'
+import { cuantoLeQueda } from '../../lib/view'
+import { tenantId } from '../../lib/tenant'
 
 export const dynamic = 'force-dynamic'
 

@@ -1,8 +1,8 @@
 import { runWithTenant } from '@coord/core'
 import { configureDatabase, listVerificationFlows } from '@coord/db'
 
-import { haceCuanto, tonoDeFlujo } from '../../lib/view.js'
-import { tenantId } from '../../lib/tenant.js'
+import { haceCuanto, tonoDeFlujo } from '../../lib/view'
+import { tenantId } from '../../lib/tenant'
 
 export const dynamic = 'force-dynamic'
 
