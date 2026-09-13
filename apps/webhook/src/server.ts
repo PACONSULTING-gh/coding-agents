@@ -20,6 +20,8 @@ import {
   type SignatureVerifier,
 } from '@coord/github'
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify'
+
+import { handleHeartbeat, HEARTBEAT_PATH, MAX_HEARTBEAT_BYTES } from './heartbeat-route.js'
 import type { Logger } from 'pino'
 
 /**
@@ -205,6 +207,17 @@ export function buildServer(deps: WebhookServerDeps) {
     (_request, body: Buffer, done) => {
       done(null, body)
     },
+  )
+
+  // Los latidos de los agentes (epic 04 / T01). Van en este mismo servicio y no
+  // en uno aparte porque comparten exactamente lo que cuesta montar —TLS,
+  // despliegue, vigilancia— y no comparten nada que convenga aislar: son dos
+  // rutas con autenticaciones distintas.
+  app.post(
+    HEARTBEAT_PATH,
+    { bodyLimit: MAX_HEARTBEAT_BYTES },
+    async (request: FastifyRequest, reply: FastifyReply) =>
+      handleHeartbeat(request, reply, { logger: deps.logger }),
   )
 
   app.get('/health', async (_request: FastifyRequest, reply: FastifyReply) => {
