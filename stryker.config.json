@@ -59,7 +59,8 @@
     "apps/daemon/src/daemon.ts",
     "packages/core/src/collision-prediction.ts",
     "apps/dashboard/src/lib/view.ts",
-    "apps/worker/src/routing-run.ts"
+    "apps/worker/src/routing-run.ts",
+    "apps/webhook/src/heartbeat-classify.ts"
   ],
   "thresholds": {
     "high": 80,
