@@ -249,6 +249,12 @@ importers:
         specifier: ^4.23.13
         version: 4.23.13
 
+  packages/slack:
+    dependencies:
+      '@coord/core':
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   '@anthropic-ai/sdk@0.124.0':

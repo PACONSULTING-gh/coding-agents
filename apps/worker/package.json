@@ -9,7 +9,8 @@
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc -p test/tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "status:team": "tsx src/team-status-cli.ts"
   },
   "dependencies": {
     "@coord/core": "workspace:*",
