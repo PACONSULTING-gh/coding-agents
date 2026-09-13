@@ -47,7 +47,9 @@
     "packages/graph/src/parse/javascript.ts",
     "apps/simulated-dev/src/work-loop.ts",
     "apps/worker/src/delivery.ts",
-    "apps/worker/src/verification-run.ts"
+    "apps/worker/src/verification-run.ts",
+    "packages/core/src/heartbeat.ts",
+    "packages/db/src/agents.ts"
   ],
   "thresholds": {
     "high": 80,
