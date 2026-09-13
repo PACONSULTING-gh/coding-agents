@@ -58,7 +58,8 @@
     "apps/daemon/src/telemetry.ts",
     "apps/daemon/src/daemon.ts",
     "packages/core/src/collision-prediction.ts",
-    "apps/dashboard/src/lib/view.ts"
+    "apps/dashboard/src/lib/view.ts",
+    "apps/worker/src/routing-run.ts"
   ],
   "thresholds": {
     "high": 80,
