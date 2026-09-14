@@ -60,7 +60,9 @@
     "packages/core/src/collision-prediction.ts",
     "apps/dashboard/src/lib/view.ts",
     "apps/worker/src/routing-run.ts",
-    "apps/webhook/src/heartbeat-classify.ts"
+    "apps/webhook/src/heartbeat-classify.ts",
+    "packages/github/src/verification-trigger.ts",
+    "apps/worker/src/verification-trigger-run.ts"
   ],
   "thresholds": {
     "high": 80,

@@ -76,3 +76,9 @@ export {
   type EscalationTarget,
 } from './escalation-notification.js'
 export type { PullRequestCommentTarget, PublishedComment } from './pull-request-comments.js'
+export { decideVerificationTrigger, VERIFICATION_SKIP_REASONS } from './verification-trigger.js'
+export type {
+  VerifiableDelivery,
+  VerificationSkipReason,
+  VerificationTrigger,
+} from './verification-trigger.js'
