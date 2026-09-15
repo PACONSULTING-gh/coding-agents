@@ -24,9 +24,9 @@ jobs:
     name: Formato y lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -44,9 +44,9 @@ jobs:
     name: Type-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -84,9 +84,9 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://coord@localhost:5432/coord
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -99,7 +99,7 @@ jobs:
       # en la lista aprobada" es una senal de alarma), no se anade aqui sin
       # decision humana. Este paso queda listo para activarse en cuanto se
       # apruebe la dependencia: sube lo que haya en **/coverage si existe.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
@@ -111,13 +111,13 @@ jobs:
     name: Integridad de tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # El gate diffea contra origin/main (Epic 05 / T03): sin historial
           # completo no hay con que calcular la base de comparacion, y
           # `git merge-base` falla en un checkout superficial.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       # Sin `pnpm install`: el script solo usa la stdlib de Node y `git`, asi
@@ -158,9 +158,9 @@ jobs:
     # Sin este job la unica comprobacion era un hook local que el propio codigo
     # declara que no detiene a nadie.
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -180,9 +180,9 @@ jobs:
     name: Fitness functions de arquitectura
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -208,7 +208,7 @@ jobs:
     container:
       image: semgrep/semgrep:1.176.1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # `--severity=ERROR` es lo que hace cumplir el enunciado de T06 ("se falla
       # solo en severidad alta/critica al principio, para no generar ruido que
       # la gente aprenda a ignorar"). `semgrep ci` sin conexion a la plataforma
@@ -229,7 +229,7 @@ jobs:
     name: Secretos (Gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       # Binario oficial con checksum FIJADO, no `gitleaks/gitleaks-action@v2`.
@@ -273,7 +273,7 @@ jobs:
     # literales, entran por variable de entorno.
     # Ver docs/quality-gates.md, fila "IaC".
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
@@ -291,9 +291,9 @@ jobs:
     name: SCA de dependencias
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
