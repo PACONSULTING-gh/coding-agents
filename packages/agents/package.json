@@ -17,14 +17,14 @@
     "probe:once": "tsx test/verifier-once-cli.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.124.0",
+    "@anthropic-ai/sdk": "^0.131.0",
     "@coord/core": "workspace:*",
     "@coord/db": "workspace:*",
     "@coord/github": "workspace:*",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@testcontainers/postgresql": "^12.1.0",
-    "testcontainers": "^12.1.0"
+    "@testcontainers/postgresql": "^12.2.0",
+    "testcontainers": "^12.2.0"
   }
 }

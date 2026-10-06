@@ -16,8 +16,8 @@
     "@coord/queue": "workspace:*",
     "@coord/github": "workspace:*",
     "@coord/db": "workspace:*",
-    "fastify": "^5.12.3",
-    "pino": "^10.3.1"
+    "fastify": "^5.12.5",
+    "pino": "^10.4.0"
   },
   "devDependencies": {
     "pino-pretty": "^13.1.3"
