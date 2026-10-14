@@ -14,12 +14,12 @@
   },
   "dependencies": {
     "@coord/core": "workspace:*",
-    "pg-boss": "^12.30.0",
-    "zod": "^4.5.4"
+    "pg-boss": "^12.37.1",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
-    "testcontainers": "^12.1.0",
-    "@testcontainers/postgresql": "^12.1.0",
-    "tsx": "^4.23.13"
+    "testcontainers": "^12.2.0",
+    "@testcontainers/postgresql": "^12.2.0",
+    "tsx": "^4.23.15"
   }
 }
